@@ -109,6 +109,7 @@ export const App: React.FC = () => {
   const [scrollX, setScrollX] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [isSnapEnabled, setIsSnapEnabled] = useState(false);
+  const [isAnimated, setIsAnimated] = useState(true);
   const [gridIndex, setGridIndex] = useState(3); // Default to 1/8 (index 3)
   const gridSize = GRID_OPTIONS[gridIndex].value;
   
@@ -286,6 +287,12 @@ export const App: React.FC = () => {
         >
           SNAP
         </button>
+        <button 
+          className={isAnimated ? 'active' : ''} 
+          onClick={() => setIsAnimated(!isAnimated)}
+        >
+          ANIMATED
+        </button>
         <label>
           GRID: {GRID_OPTIONS[gridIndex].label}
           <input 
@@ -301,7 +308,7 @@ export const App: React.FC = () => {
       </div>
       <div className="piano-roll-viewport">
         <div 
-          className="piano-roll-content"
+          className={`piano-roll-content ${isAnimated ? 'animated' : ''}`}
           style={{ transform: `translate(${-scrollX}px, ${-scrollY}px)` }}
         >
           <div className="piano-lanes-container">
