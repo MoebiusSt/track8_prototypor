@@ -1,0 +1,118 @@
+/* ==========================================================================
+   Track8 Prototypor – Design Tokens
+   Source: Thingstone Theme Editor "Dark" theme (1.1.0)
+   Display: 1280 x 400 px
+   ========================================================================== */
+
+:root {
+  /* Display dimensions */
+  --display-width: 1280px;
+  --display-height: 400px;
+
+  /* ---------- Theme Editor colors ("Dark" preset) ---------- */
+
+  /* Background */
+  --color-bg: #272822;                          /* backgroundColor */
+
+  /* Encoder / automation colors */
+  --color-automated-encoder: #a6e22e;           /* automatedEncoderColor */
+  --color-automated-encoder-muted: #6a8e1f;     /* automatedMutedEncoderColor */
+
+  /* Settings UI chrome */
+  --color-settings-boxes: #8bae57;              /* settingsBoxesColor */
+  --color-encoder-text: #fd971f;                /* encoderTextColor */
+  --color-encoder-text-muted: #7a4b10;          /* encoderTextMutedColor */
+
+  /* General text */
+  --color-settings-text: #f8f8f2;              /* settingsTextColor */
+  --color-settings-text-muted: #75715e;        /* settingsMutedTextColor */
+
+  /* Beat bar / timeline ruler */
+  --color-beat-bar: #f8f8f2;                   /* beatBarColor */
+
+  /* MIDI */
+  --color-midi-cursor: rgba(253, 151, 31, 0.59); /* midiCursorColor (alpha 150) */
+  --color-midi-bg: #75715e;                    /* midiBackgroundColor */
+  --color-midi-note: rgba(166, 226, 46, 0.43); /* midiNoteColor (alpha 110) */
+
+  /* Danger / recording indicator */
+  --color-danger: #f92672;                     /* dangerColor */
+  --color-danger-faded: #7a1c3a;               /* dangerFadedColor */
+
+  /* Overlay */
+  --color-overlay: rgba(0, 0, 0, 0.67);        /* overlayColor (alpha 170) */
+  --color-overlay-names: rgba(0, 0, 0, 0.78);  /* overlayNamesColor (alpha 200) */
+
+  /* Audio tracks */
+  --color-audio-track: #f8f8f2;                /* audioTrackColor */
+  --color-audio-track-selected: #a6e22e;       /* selectedAudioTrackColor */
+  --color-audio-track-recording: #f92672;      /* recordingAudioTrackColor */
+  --color-audio-track-muted: #75715e;          /* mutedAudioTrackColor */
+  --color-audio-track-selected-muted: #668c1c; /* selectedMutedAudioTrackColor */
+  --color-audio-nudge-active: #fd971f;         /* activeAudioNudgeColor */
+
+  /* MIDI tracks */
+  --color-midi-track: #f8f8f2;                 /* midiTrackColor */
+  --color-midi-track-selected: #a6e22e;        /* selectedMidiTrackColor */
+  --color-midi-track-recording: #f92672;       /* recordingMidiTrackColor */
+  --color-midi-track-muted: #75715e;           /* mutedMidiTrackColor */
+  --color-midi-track-selected-muted: #668c1c;  /* selectedMutedMidiTrackColor */
+  --color-midi-nudge-active: #fd971f;          /* activeMidiNudgeColor */
+
+  /* Loop */
+  --color-loop: #3e3d32;                       /* loopColor */
+  --color-loop-active: #6a8e1f;                /* activeLoopColor */
+
+  /* Punch in */
+  --color-punch-in: rgba(249, 38, 114, 0.50);  /* punchInColor (alpha 127) */
+  --color-punch-in-active: #f92672;            /* activePunchInColor */
+
+  /* Filter / EQ visualization */
+  --color-filter-curve: #fd971f;               /* filterCurveColor */
+  --color-filter-pre: rgba(166, 226, 46, 0.47); /* filterPreColor (alpha 120) */
+  --color-filter-post: rgba(253, 151, 31, 0.59); /* filterPostColor (alpha 150) */
+
+  /* Compressor visualization */
+  --color-compressor-pre: #6a8e1f;             /* compressorPreColor */
+  --color-compressor-post: #7a4b10;            /* compressorPostColor */
+
+  /* ---------- Semantic aliases ---------- */
+  --color-text-primary: var(--color-settings-text);
+  --color-text-dim: var(--color-settings-text-muted);
+  --color-accent: var(--color-encoder-text);
+  --color-accent-bright: #ff9040;
+  --color-waveform: var(--color-audio-track);
+  --color-waveform-selected: var(--color-audio-track-selected);
+  --color-border: var(--color-settings-boxes);
+  --color-border-highlight: var(--color-automated-encoder);
+  --color-playhead: var(--color-encoder-text);
+  --color-record: var(--color-danger);
+
+  /* ---------- Spacing – 2px grid system ---------- */
+  --px: 2px;
+  --gap-xs: 2px;
+  --gap-sm: 4px;
+  --gap-md: 8px;
+  --gap-lg: 16px;
+  --gap-xl: 32px;
+
+  /* ---------- Borders ---------- */
+  --border-width: 2px;
+  --border-style: solid;
+
+  /* ---------- Typography ---------- */
+  --font-family: 'Monogram', monospace;
+  --font-size-sm: 14px;
+  --font-size-md: 18px;
+  --font-size-lg: 24px;
+  --font-size-xl: 36px;
+  --font-size-title: 48px;
+
+  /* ---------- Layout zones ---------- */
+  --track-count: 8;
+  --track-height: 36px;
+  --marker-bar-height: 24px;
+  --status-bar-height: 28px;
+  --function-bar-height: 28px;
+  --encoder-row-height: 160px;
+}

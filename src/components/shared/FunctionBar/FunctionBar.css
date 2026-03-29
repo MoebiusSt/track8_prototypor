@@ -1,0 +1,27 @@
+.function-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: var(--function-bar-height);
+  background-color: var(--color-bg);
+  border-top: 2px solid var(--color-settings-text);
+  padding: 0 var(--gap-md);
+  gap: var(--gap-md);
+}
+
+.function-slot {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.function-label {
+  font-family: var(--font-family);
+  font-size: 11px;
+  color: var(--color-encoder-text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}

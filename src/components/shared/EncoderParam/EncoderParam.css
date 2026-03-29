@@ -1,0 +1,33 @@
+.encoder-param {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  flex: 1;
+}
+
+.encoder-label {
+  font-family: var(--font-family);
+  font-size: 12px;
+  color: var(--color-encoder-text);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: bold;
+  height: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.encoder-value-box {
+  border: 2px solid var(--color-settings-boxes);
+  padding: 4px 8px;
+  font-family: var(--font-family);
+  font-size: 14px;
+  color: var(--color-settings-text);
+  text-align: center;
+  font-weight: bold;
+  min-width: 50px;
+  letter-spacing: 1px;
+}

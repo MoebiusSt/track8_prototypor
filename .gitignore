@@ -1,0 +1,34 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Reference files (kept locally, not in public repo)
+Manual1.1.0.pdf
+screenshot_*.png
+example_*.jpg
+Track8_feauture_design_principles.md
+SCAFFOLD_SUMMARY.md
+
+# Root-level font duplicate (the tracked copy lives in src/assets/fonts/)
+/monogram_Medium.ttf
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -1,0 +1,33 @@
+.device-frame {
+  display: flex;
+  flex-direction: column;
+  width: var(--display-width);
+  height: var(--display-height);
+  background-color: var(--color-bg);
+  border: 3px solid var(--color-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  font-family: var(--font-family);
+}
+
+.screen-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.screen-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.status-footer {
+  display: flex;
+  flex-direction: column;
+}
+
+.function-footer {
+  background-color: var(--color-bg-panel);
+  border-top: var(--border-width) var(--border-style) var(--color-border);
+}

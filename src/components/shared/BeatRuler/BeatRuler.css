@@ -1,0 +1,46 @@
+.beat-ruler {
+  height: 32px;
+  background-color: var(--color-bg);
+  border-bottom: 2px solid var(--color-beat-bar);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.ruler-ticks {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  padding: 4px var(--gap-md) 0 var(--gap-md);
+}
+
+.tick {
+  width: 1px;
+  background-color: var(--color-beat-bar);
+}
+
+.tick.major {
+  height: 8px;
+}
+
+.tick.minor {
+  height: 4px;
+}
+
+.ruler-labels {
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 var(--gap-md);
+  font-family: var(--font-family);
+  font-size: 10px;
+  color: var(--color-settings-text);
+}
+
+.label {
+  font-size: 9px;
+  white-space: nowrap;
+}

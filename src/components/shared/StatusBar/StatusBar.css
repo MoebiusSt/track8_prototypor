@@ -1,0 +1,53 @@
+.status-bar {
+  display: flex;
+  align-items: center;
+  height: var(--status-bar-height);
+  padding: 0 var(--gap-md);
+  background-color: var(--color-bg);
+  border-top: 2px solid var(--color-settings-text);
+  font-family: var(--font-family);
+  font-size: 12px;
+  color: var(--color-settings-text);
+  gap: var(--gap-lg);
+}
+
+.status-left {
+  font-weight: bold;
+  min-width: 30px;
+}
+
+.status-right {
+  font-weight: bold;
+  min-width: 30px;
+  margin-left: auto;
+}
+
+.status-recording-lanes {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.recording-indicator {
+  width: 8px;
+  height: 16px;
+  background-color: transparent;
+  border: 1px solid var(--color-settings-text-muted);
+}
+
+.recording-indicator.armed {
+  background-color: var(--color-danger);
+}
+
+.status-displays {
+  display: flex;
+  gap: var(--gap-lg);
+  flex: 1;
+  justify-content: center;
+}
+
+.status-display {
+  font-family: var(--font-family);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
