@@ -2,7 +2,12 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main, master, animated ]
+    branches:
+      - master
+      - main
+      - intent-weighted-snap
+      - animated
+      - verwirrender-direktional-naechster-jump
   workflow_dispatch:
 
 permissions:
