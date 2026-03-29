@@ -1,6 +1,6 @@
 /**
- * Bottom status bar showing transport info and storage
- * Format: -IN- | recording indicators | T time | B bar:beat | storage | -OUT-
+ * Status bar – bottom 20px of the device display.
+ * Format (matching real device): -IN- [8 track indicators] T time  B bar  storage -OUT-
  */
 
 import { useDevice } from '../../../state/DeviceContext';
@@ -8,29 +8,32 @@ import './StatusBar.css';
 
 export function StatusBar() {
   const { state } = useDevice();
+  const { transport, tracks, storageUsed, storageTotal } = state;
 
   return (
     <div className="status-bar">
-      <div className="status-left">-IN-</div>
+      {/* Loop in marker */}
+      <span className="sb-edge">-IN-</span>
 
-      <div className="status-recording-lanes">
-        {state.tracks.map((track) => (
+      {/* 8 track recording indicators */}
+      <div className="sb-track-indicators">
+        {tracks.map((t) => (
           <div
-            key={track.id}
-            className={`recording-indicator ${track.armed ? 'armed' : ''}`}
+            key={t.id}
+            className={`sb-track-dot ${t.armed ? 'armed' : ''}`}
           />
         ))}
       </div>
 
-      <div className="status-displays">
-        <div className="status-display">T {state.transport.timeDisplay}</div>
-        <div className="status-display">B {state.transport.barPosition}</div>
-        <div className="status-display">
-          {state.storageUsed.toFixed(1)}GB/{state.storageTotal.toFixed(1)}GB
-        </div>
+      {/* Transport time and bar position – centred */}
+      <div className="sb-transport">
+        <span className="sb-time">T {transport.timeDisplay}</span>
+        <span className="sb-bar">B {transport.barPosition}</span>
+        <span className="sb-storage">{storageUsed.toFixed(1)}GB/{storageTotal.toFixed(1)}GB</span>
       </div>
 
-      <div className="status-right">-OUT-</div>
+      {/* Loop out marker */}
+      <span className="sb-edge sb-edge-right">-OUT-</span>
     </div>
   );
 }

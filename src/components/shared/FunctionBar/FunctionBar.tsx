@@ -6,7 +6,7 @@
 import { useDevice } from '../../../state/DeviceContext';
 import './FunctionBar.css';
 
-export const FUNCTION_LABELS: Record<string, string[]> = {
+const FUNCTION_LABELS: Record<string, string[]> = {
   audio: [
     'TAP TEMPO',
     'UTILITY',

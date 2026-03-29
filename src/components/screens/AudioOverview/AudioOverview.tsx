@@ -1,11 +1,11 @@
 /**
- * Audio Overview Screen - Main recording/playback interface
- * Shows beat ruler, markers, and 8 audio tracks with waveforms
+ * Audio Overview Screen
+ * Beat/level ruler → 8 track waveform lanes
+ * Fills its container (400px display minus 20px status bar = 380px).
  */
 
 import { useDevice } from '../../../state/DeviceContext';
 import { BeatRuler } from '../../shared/BeatRuler/BeatRuler';
-import { MarkerBar } from '../../shared/MarkerBar/MarkerBar';
 import { TrackLane } from '../../shared/TrackLane/TrackLane';
 import './AudioOverview.css';
 
@@ -15,8 +15,6 @@ export function AudioOverview() {
   return (
     <div className="audio-overview">
       <BeatRuler />
-      <MarkerBar />
-
       <div className="tracks-container">
         {state.tracks.map((track) => (
           <TrackLane key={track.id} track={track} />

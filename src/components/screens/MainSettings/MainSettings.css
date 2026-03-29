@@ -3,48 +3,72 @@
   flex-direction: column;
   height: 100%;
   background-color: var(--color-bg);
-  padding: var(--gap-md);
+  overflow: hidden;
 }
 
-.settings-encoder-row {
+/* ── Top encoder row ─────────────────────────────────────────────── */
+.ms-encoder-row {
   display: flex;
-  justify-content: space-around;
+  justify-content: stretch;
   align-items: flex-start;
-  gap: var(--gap-md);
-  padding-bottom: var(--gap-lg);
-  border-bottom: 1px solid rgba(248, 248, 242, 0.1);
-  margin-bottom: var(--gap-lg);
+  height: 90px;
+  flex-shrink: 0;
+  border-bottom: 2px solid var(--color-settings-boxes);
 }
 
-.settings-center {
+/* ── Centre panel ────────────────────────────────────────────────── */
+.ms-center {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--gap-md);
+  gap: 12px;
+  padding: 0 24px;
 }
 
-.song-name-box {
+.ms-label-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ms-dim-label {
+  font-family: var(--font-family);
+  font-size: 14px;
+  color: var(--color-settings-text-muted);
+  letter-spacing: 1px;
+}
+
+.ms-song-box {
   border: 2px solid var(--color-settings-boxes);
-  padding: var(--gap-md);
+  padding: 6px 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 200px;
+  min-width: 240px;
 }
 
-.song-name {
+.ms-song-name {
   font-family: var(--font-family);
-  font-size: 32px;
+  font-size: 48px;
   color: var(--color-settings-text);
-  font-weight: bold;
-  letter-spacing: 2px;
+  letter-spacing: 3px;
+  line-height: 1;
 }
 
-.version-info {
+.ms-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-family: var(--font-family);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--color-settings-text-muted);
-  letter-spacing: 0.5px;
+}
+
+.ms-meta-value {
+  font-family: var(--font-family);
+  font-size: 13px;
+  color: var(--color-encoder-text);
+  letter-spacing: 1px;
 }

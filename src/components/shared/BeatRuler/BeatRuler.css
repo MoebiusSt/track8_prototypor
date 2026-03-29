@@ -1,46 +1,82 @@
 .beat-ruler {
-  height: 32px;
+  height: 22px;
   background-color: var(--color-bg);
-  border-bottom: 2px solid var(--color-beat-bar);
-  display: flex;
-  flex-direction: column;
-  padding: 0;
+  flex-shrink: 0;
+  position: relative;
   overflow: hidden;
+  /* thin separator between ruler and first track */
+  border-bottom: 1px solid rgba(248, 248, 242, 0.12);
 }
 
-.ruler-ticks {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-around;
-  padding: 4px var(--gap-md) 0 var(--gap-md);
+/* ── Label row (top ~11px) ───────────────────────────────────────── */
+.ruler-label-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 11px;
+  /* prevents click-through covering tick row */
+  pointer-events: none;
 }
 
-.tick {
-  width: 1px;
-  background-color: var(--color-beat-bar);
+.ruler-db-label {
+  position: absolute;
+  top: 1px;
+  font-family: var(--font-family);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-encoder-text);   /* orange */
+  white-space: nowrap;
+  transform: translateX(-50%);
+  letter-spacing: 0;
 }
 
-.tick.major {
-  height: 8px;
+/* "V" label stays flush to the left edge */
+.ruler-db-label:first-child {
+  transform: none;
+  left: 2px !important;
 }
 
-.tick.minor {
-  height: 4px;
-}
-
-.ruler-labels {
-  height: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  padding: 0 var(--gap-md);
+/* Marker badges (song position markers) */
+.ruler-marker-tag {
+  position: absolute;
+  top: 0;
   font-family: var(--font-family);
   font-size: 10px;
+  line-height: 11px;
   color: var(--color-settings-text);
+  background: rgba(139, 174, 87, 0.55);
+  padding: 0 3px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 2;
 }
 
-.label {
-  font-size: 9px;
-  white-space: nowrap;
+/* ── Tick marks row (bottom ~11px) ───────────────────────────────── */
+.ruler-tick-row {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 11px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.rtick {
+  flex: 1;
+  background-color: var(--color-beat-bar); /* white #f8f8f2 */
+}
+
+.rtick.major {
+  height: 11px;
+}
+
+.rtick.semi {
+  height: 7px;
+}
+
+.rtick.minor {
+  height: 4px;
 }

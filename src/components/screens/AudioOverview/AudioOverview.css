@@ -6,9 +6,11 @@
   overflow: hidden;
 }
 
+/* Track container fills remaining height below the ruler */
 .tracks-container {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
+  min-height: 0;
 }

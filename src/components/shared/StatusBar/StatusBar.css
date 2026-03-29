@@ -1,53 +1,62 @@
 .status-bar {
   display: flex;
   align-items: center;
-  height: var(--status-bar-height);
-  padding: 0 var(--gap-md);
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0 6px;
   background-color: var(--color-bg);
-  border-top: 2px solid var(--color-settings-text);
+  border-top: 1px solid rgba(248, 248, 242, 0.20);
   font-family: var(--font-family);
-  font-size: 12px;
-  color: var(--color-settings-text);
-  gap: var(--gap-lg);
+  font-size: 13px;
+  color: var(--color-encoder-text); /* orange like the real device */
+  gap: 6px;
 }
 
-.status-left {
-  font-weight: bold;
-  min-width: 30px;
+/* -IN- / -OUT- edge markers */
+.sb-edge {
+  white-space: nowrap;
+  letter-spacing: 1px;
+  flex-shrink: 0;
 }
 
-.status-right {
-  font-weight: bold;
-  min-width: 30px;
+.sb-edge-right {
   margin-left: auto;
 }
 
-.status-recording-lanes {
+/* 8 tiny armed track dots */
+.sb-track-indicators {
   display: flex;
-  gap: 2px;
+  gap: 3px;
   align-items: center;
+  flex-shrink: 0;
 }
 
-.recording-indicator {
-  width: 8px;
-  height: 16px;
-  background-color: transparent;
-  border: 1px solid var(--color-settings-text-muted);
+.sb-track-dot {
+  width: 10px;
+  height: 13px;
+  border: 1px solid rgba(253, 151, 31, 0.35);
+  background: transparent;
 }
 
-.recording-indicator.armed {
+.sb-track-dot.armed {
   background-color: var(--color-danger);
+  border-color: var(--color-danger);
 }
 
-.status-displays {
-  display: flex;
-  gap: var(--gap-lg);
+/* Centred transport section */
+.sb-transport {
   flex: 1;
+  display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 20px;
 }
 
-.status-display {
+.sb-time,
+.sb-bar,
+.sb-storage {
   font-family: var(--font-family);
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 1px;
+  white-space: nowrap;
 }

@@ -1,10 +1,11 @@
 /**
- * Root App component with device frame and state provider
+ * Root App component – device frame + function bar + keyboard panel
  */
 
 import { DeviceProvider } from './state/DeviceContext';
 import { DeviceFrame } from './components/DeviceFrame/DeviceFrame';
-import { SimulationPanel } from './components/SimulationPanel/SimulationPanel';
+import { FunctionBar } from './components/shared/FunctionBar/FunctionBar';
+import { KeyboardPanel } from './components/KeyboardPanel/KeyboardPanel';
 import { useKeyboardInput } from './hooks/useKeyboardInput';
 import './app.css';
 
@@ -13,8 +14,12 @@ function AppContent() {
 
   return (
     <div className="app-shell">
+      {/* The 1280×400 px device screen */}
       <DeviceFrame />
-      <SimulationPanel />
+      {/* F1-F8 encoder labels – below the screen, like physical device labels */}
+      <FunctionBar />
+      {/* On-screen keyboard reference panel */}
+      <KeyboardPanel />
     </div>
   );
 }
