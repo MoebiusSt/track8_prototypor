@@ -7,6 +7,8 @@ import type { DeviceState, ScreenId } from '../types/device';
 export type DeviceAction =
   | { type: 'SWITCH_SCREEN'; payload: ScreenId }
   | { type: 'SET_POSITION'; payload: number }
+  | { type: 'ADJUST_POSITION'; payload: number }
+  | { type: 'SELECT_TRACK'; payload: number }
   | { type: 'TOGGLE_PLAY' }
   | { type: 'TOGGLE_RECORD' }
   | { type: 'TOGGLE_LOOP' }
@@ -18,12 +20,15 @@ export type DeviceAction =
   | { type: 'SET_BPM'; payload: number }
   | { type: 'SET_BRIGHTNESS'; payload: number }
   | { type: 'SET_SHIFT_HELD'; payload: boolean }
+  | { type: 'ENCODER_ROTATE'; payload: { index: number; delta: number } }
+  | { type: 'ENCODER_PRESS'; payload: number }
   | { type: 'TAP_TEMPO' }
   | { type: 'RESET' };
 
 export const initialDeviceState: DeviceState = {
   currentScreen: 'audio',
   previousScreen: 'audio',
+  selectedTrackIndex: 0,
   songName: 'my-song',
   firmwareVersion: '1.1.2-beta2',
   storageUsed: 110.6,
