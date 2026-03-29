@@ -110,7 +110,7 @@ export const App: React.FC = () => {
   const [scrollY, setScrollY] = useState(0);
   const [isSnapEnabled, setIsSnapEnabled] = useState(false);
   const [isAnimated, setIsAnimated] = useState(true);
-  const [snapMode, setSnapMode] = useState<'directional' | 'intent_weighted' | 'ellipsoid' | 'orthogonal'>('ellipsoid');
+  const [snapMode, setSnapMode] = useState<'directional' | 'intent_weighted' | 'ellipsoid' | 'orthogonal' | 'reversible'>('reversible');
   const [gridIndex, setGridIndex] = useState(3); // Default to 1/8 (index 3)
   const gridSize = GRID_OPTIONS[gridIndex].value;
   
@@ -300,6 +300,50 @@ export const App: React.FC = () => {
             }
           }
         }
+      } else if (snapMode === 'reversible') {
+        // Find the absolute closest note to current position (if perfectly snapped, distance is 0)
+        let closestNote = notes[0];
+        let minDist = Infinity;
+        for (const n of notes) {
+          const nx = n.startTime;
+          const ny = (127 - n.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
+          const d = Math.pow(nx - cx, 2) + Math.pow(ny - cy, 2);
+          if (d < minDist) {
+            minDist = d;
+            closestNote = n;
+          }
+        }
+
+        if (closestNote) {
+          if (direction === 'left' || direction === 'right') {
+            const sortedByX = [...notes].sort((a, b) => {
+              if (a.startTime !== b.startTime) return a.startTime - b.startTime;
+              return b.noteNumber - a.noteNumber; // tie breaker: higher pitch first
+            });
+            const idx = sortedByX.findIndex(n => n.id === closestNote.id);
+            if (direction === 'right' && idx < sortedByX.length - 1) {
+              bestNote = sortedByX[idx + 1];
+            } else if (direction === 'left' && idx > 0) {
+              bestNote = sortedByX[idx - 1];
+            }
+          } else {
+            const sortedByY = [...notes].sort((a, b) => {
+              // Y is visual coordinate (smaller Y = higher pitch)
+              const yA = (127 - a.noteNumber) * KEY_HEIGHT;
+              const yB = (127 - b.noteNumber) * KEY_HEIGHT;
+              if (yA !== yB) return yA - yB;
+              return a.startTime - b.startTime; // tie breaker: earlier time first
+            });
+            const idx = sortedByY.findIndex(n => n.id === closestNote.id);
+            if (direction === 'down' && idx < sortedByY.length - 1) {
+              // down means increasing visual Y -> go to next in sortedByY
+              bestNote = sortedByY[idx + 1];
+            } else if (direction === 'up' && idx > 0) {
+              // up means decreasing visual Y -> go to prev in sortedByY
+              bestNote = sortedByY[idx - 1];
+            }
+          }
+        }
       }
 
       if (bestNote) {
@@ -399,6 +443,7 @@ export const App: React.FC = () => {
             <option value="intent_weighted">Cone (Strict Axis)</option>
             <option value="ellipsoid">Ellipsoid (Balanced)</option>
             <option value="orthogonal">Orthogonal (Strict Next)</option>
+            <option value="reversible">Strictly Reversible (1D Sequence)</option>
           </select>
         </label>
         <button 
@@ -464,6 +509,9 @@ export const App: React.FC = () => {
           )}
           {snapMode === 'orthogonal' && (
             <p><strong>Orthogonal (Strict Next):</strong> Absolute rigid priority. Moving Right always goes to the chronologically next note, even if it is 8 octaves away. Moving Up always goes to the next higher pitch, regardless of time.</p>
+          )}
+          {snapMode === 'reversible' && (
+            <p><strong>Strictly Reversible (1D Sequence):</strong> Projects all notes into a strictly sorted 1D array (Left/Right by Time, Up/Down by Pitch). Guarantees 100% mathematical reversibility: a jump Right followed by Left will ALWAYS return to the exact same note.</p>
           )}
         </div>
       )}
