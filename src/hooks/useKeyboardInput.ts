@@ -1,5 +1,15 @@
 /**
  * Keyboard mapping from desktop keys to Track8 hardware actions
+ *
+ * Numpad layout (matches on-screen KeyboardPanel):
+ *   Num7  Num8  Num9      — (unused)
+ *   Num4  Num5  Num6      LOOP / LOOP START / LOOP END
+ *   Num1  Num2  Num3  ENTER   — / — / — / RECORD
+ *   Num0    .              SHIFT / PLAY
+ *
+ * Arrow keys:  ←  Audio view   →  Settings screen
+ * F1–F8:  Encoder press 1–8
+ * 1–8:    Track arm toggle
  */
 
 import { useEffect } from 'react';
@@ -23,30 +33,34 @@ export function useKeyboardInput() {
 
       const code = event.code;
 
+      // ── SHIFT (hold) ─────────────────────────────────────────────
       if (code === 'Numpad0') {
         event.preventDefault();
         dispatch({ type: 'SET_SHIFT_HELD', payload: true });
         return;
       }
 
+      // ── PLAY ─────────────────────────────────────────────────────
       if (code === 'NumpadDecimal' || code === 'Comma') {
         event.preventDefault();
         dispatch({ type: 'TOGGLE_PLAY' });
         return;
       }
 
+      // ── Screen navigation ─────────────────────────────────────────
       if (code === 'ArrowLeft') {
         event.preventDefault();
-        dispatch({ type: 'ADJUST_POSITION', payload: -1.2 });
+        dispatch({ type: 'SWITCH_SCREEN', payload: 'audio' });
         return;
       }
 
       if (code === 'ArrowRight') {
         event.preventDefault();
-        dispatch({ type: 'ADJUST_POSITION', payload: 1.2 });
+        dispatch({ type: 'SWITCH_SCREEN', payload: 'settings' });
         return;
       }
 
+      // ── F-keys → encoder press ────────────────────────────────────
       const fk = F_KEYS.indexOf(code as (typeof F_KEYS)[number]);
       if (fk !== -1) {
         event.preventDefault();
@@ -55,22 +69,27 @@ export function useKeyboardInput() {
       }
 
       switch (code) {
-        case 'Numpad1':
+        // ── Loop controls (middle numpad row) ──────────────────────
+        case 'Numpad4':
           event.preventDefault();
           dispatch({ type: 'TOGGLE_LOOP' });
           break;
-        case 'Numpad2':
+        case 'Numpad5':
           event.preventDefault();
           dispatch({ type: 'SET_LOOP_START' });
           break;
-        case 'Numpad3':
+        case 'Numpad6':
           event.preventDefault();
           dispatch({ type: 'SET_LOOP_END' });
           break;
+
+        // ── Record ────────────────────────────────────────────────
         case 'NumpadEnter':
           event.preventDefault();
           dispatch({ type: 'TOGGLE_RECORD' });
           break;
+
+        // ── Track arm (digit row 1–8) ──────────────────────────────
         case 'Digit1':
           event.preventDefault();
           dispatch({ type: 'TOGGLE_TRACK_ARM', payload: 0 });
@@ -103,6 +122,7 @@ export function useKeyboardInput() {
           event.preventDefault();
           dispatch({ type: 'TOGGLE_TRACK_ARM', payload: 7 });
           break;
+
         default:
           break;
       }
