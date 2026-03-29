@@ -126,7 +126,7 @@ body {
   box-sizing: border-box;
   border-radius: 2px;
   box-shadow: 0 0 5px rgba(90, 255, 90, 0.4);
-  height: calc(var(--key-height) - 2px);
+  height: calc(var(--key-height));
 }
 
 .crosshair {

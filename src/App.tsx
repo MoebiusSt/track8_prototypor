@@ -32,29 +32,75 @@ const isBlackKey = (noteNumber: number) => {
 
 const generateSampleNotes = (): MidiNote[] => {
   const notes: MidiNote[] = [];
-  const startNotes = [
-    { note: 60, time: 100, dur: 80 },  
-    { note: 62, time: 250, dur: 80 },  
-    { note: 64, time: 400, dur: 80 },  
-    { note: 65, time: 550, dur: 80 },  
-    { note: 67, time: 700, dur: 80 },  
-    { note: 69, time: 850, dur: 80 },  
-    { note: 71, time: 1000, dur: 80 }, 
-    { note: 72, time: 1150, dur: 80 }, 
-    { note: 67, time: 1300, dur: 160 },
-    { note: 64, time: 1500, dur: 160 },
-    { note: 60, time: 1700, dur: 300 },
+  let noteId = 0;
+  
+  const addNote = (note: number, time: number, dur: number) => {
+    notes.push({
+      id: `note-${noteId++}`,
+      noteNumber: note,
+      startTime: time,
+      duration: dur,
+      velocity: 80 + Math.random() * 40
+    });
+  };
+
+  const beat = 100;
+
+  // A more complex 8-bar progression repeated twice
+  const progressions = [
+    { root: 48, quality: 'major' }, // C
+    { root: 55, quality: 'major' }, // G
+    { root: 57, quality: 'minor' }, // Am
+    { root: 53, quality: 'major' }, // F
+    { root: 48, quality: 'major' }, // C
+    { root: 55, quality: 'major' }, // G
+    { root: 53, quality: 'major' }, // F
+    { root: 53, quality: 'major' }, // F
   ];
 
-  startNotes.forEach((n, i) => {
-    notes.push({
-      id: `note-${i}`,
-      noteNumber: n.note,
-      startTime: n.time,
-      duration: n.dur,
-      velocity: 100
-    });
-  });
+  const getChordNotes = (root: number, quality: string) => {
+    if (quality === 'major') return [root, root + 4, root + 7, root + 12];
+    return [root, root + 3, root + 7, root + 12]; // minor
+  };
+
+  for (let bar = 0; bar < 16; bar++) {
+    const prog = progressions[bar % 8];
+    const chord = getChordNotes(prog.root, prog.quality);
+    const barStart = bar * beat * 4;
+
+    // Left hand: Low bass note, sustained
+    addNote(chord[0] - 12, barStart, beat * 4 + beat * 0.5); // Sustain into next bar
+    
+    // Left hand: Broken chord, overlapping
+    addNote(chord[0], barStart + beat * 0.5, beat * 1.5);
+    addNote(chord[1], barStart + beat * 1.0, beat * 3.5); // overlapping heavily
+    addNote(chord[2], barStart + beat * 1.5, beat * 2.8); // overlapping
+    
+    // Right hand: Block chord played slightly "rolled" (strummed)
+    const rollOffset = 5;
+    addNote(chord[1] + 12, barStart + beat * 2.0 + rollOffset * 0, beat * 1.5);
+    addNote(chord[2] + 12, barStart + beat * 2.0 + rollOffset * 1, beat * 1.5);
+    addNote(chord[3] + 12, barStart + beat * 2.0 + rollOffset * 2, beat * 1.5 + beat * 0.2); // rings out slightly longer
+
+    // Right hand: Melody spanning multiple octaves and notes
+    const mBase = chord[3] + 12;
+    if (bar % 2 === 0) {
+      addNote(mBase, barStart + beat * 0.0, beat * 0.8);
+      addNote(mBase + 2, barStart + beat * 1.0, beat * 0.4);
+      addNote(mBase + 4, barStart + beat * 1.5, beat * 0.4);
+      addNote(mBase + 7, barStart + beat * 2.5, beat * 1.2);
+    } else {
+      addNote(mBase + 7, barStart + beat * 0.0, beat * 0.3);
+      addNote(mBase + 5, barStart + beat * 0.5, beat * 0.3);
+      addNote(mBase + 4, barStart + beat * 1.0, beat * 0.8);
+      
+      // Fast run
+      addNote(mBase + 2, barStart + beat * 2.0, beat * 0.2);
+      addNote(mBase + 4, barStart + beat * 2.2, beat * 0.2);
+      addNote(mBase + 5, barStart + beat * 2.4, beat * 0.2);
+      addNote(mBase + 7, barStart + beat * 2.6, beat * 1.4); // rings out
+    }
+  }
 
   return notes;
 };
