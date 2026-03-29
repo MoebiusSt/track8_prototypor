@@ -4,6 +4,7 @@
 
 import { useDevice } from '../../state/DeviceContext';
 import { AudioOverview } from '../screens/AudioOverview/AudioOverview';
+import { MidiOverview } from '../screens/MidiOverview/MidiOverview';
 import { MainSettings } from '../screens/MainSettings/MainSettings';
 import { Utility } from '../screens/Utility/Utility';
 import { StatusBar } from '../shared/StatusBar/StatusBar';
@@ -17,6 +18,8 @@ export function DeviceFrame() {
     switch (state.currentScreen) {
       case 'audio':
         return <AudioOverview />;
+      case 'midi':
+        return <MidiOverview />;
       case 'settings':
         return <MainSettings />;
       case 'utility':

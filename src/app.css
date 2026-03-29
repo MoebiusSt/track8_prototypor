@@ -19,17 +19,27 @@ body {
   font-family: var(--font-family), monospace;
   background-color: #0a1a0a;
   color: var(--color-text-primary);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 #root {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  width: 100vw;
-  height: 100vh;
+  justify-content: flex-start;
+  min-height: 100vh;
+  width: 100%;
   background: linear-gradient(135deg, #0f1e0f 0%, #1a2e1a 50%, #0f2010 100%);
-  padding: var(--gap-xl);
+  padding: var(--gap-lg) var(--gap-xl) var(--gap-xl);
+  box-sizing: border-box;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
 }
 
 /* Scrollbar styling */

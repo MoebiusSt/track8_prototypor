@@ -1,52 +1,68 @@
 /**
- * Custom hook for mouse drag to encoder rotation mapping
+ * Map pointer drag to encoder rotation (horizontal drag = turn)
  */
 
-import { useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+export type EncoderAxis = 'x' | 'y';
 
 export interface EncoderDragOptions {
   onRotate: (delta: number) => void;
-  sensitivity?: number;
+  /** Pixels moved before one reducer step is applied (higher = slower) */
+  pixelsPerStep?: number;
+  axis?: EncoderAxis;
 }
 
-export function useEncoderDrag({ onRotate, sensitivity = 2 }: EncoderDragOptions) {
-  const isDraggingRef = useRef(false);
-  const lastYRef = useRef(0);
+export function useEncoderDrag({
+  onRotate,
+  pixelsPerStep = 4,
+  axis = 'x',
+}: EncoderDragOptions) {
+  const [dragging, setDragging] = useState(false);
+  const lastRef = useRef(0);
+  const accRef = useRef(0);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    isDraggingRef.current = true;
-    lastYRef.current = e.clientY;
-  }, []);
-
-  const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-
-      const delta = lastYRef.current - e.clientY;
-      const rotation = delta * sensitivity;
-
-      if (rotation !== 0) {
-        onRotate(rotation);
-      }
-
-      lastYRef.current = e.clientY;
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      const el = e.currentTarget as HTMLElement;
+      el.setPointerCapture(e.pointerId);
+      setDragging(true);
+      lastRef.current = axis === 'x' ? e.clientX : e.clientY;
+      accRef.current = 0;
     },
-    [onRotate, sensitivity]
+    [axis]
   );
 
-  const handleMouseUp = useCallback(() => {
-    isDraggingRef.current = false;
-  }, []);
+  useEffect(() => {
+    if (!dragging) return;
 
-  const setupListeners = useCallback(() => {
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+    const onMove = (e: PointerEvent) => {
+      const cur = axis === 'x' ? e.clientX : e.clientY;
+      const delta = cur - lastRef.current;
+      lastRef.current = cur;
+      accRef.current += delta;
+      const steps = Math.trunc(accRef.current / pixelsPerStep);
+      if (steps !== 0) {
+        accRef.current -= steps * pixelsPerStep;
+        onRotate(steps);
+      }
     };
-  }, [handleMouseMove, handleMouseUp]);
 
-  return { handleMouseDown, setupListeners };
+    const onUp = () => {
+      setDragging(false);
+      accRef.current = 0;
+    };
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+    return () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    };
+  }, [dragging, axis, pixelsPerStep, onRotate]);
+
+  return { onPointerDown, dragging };
 }

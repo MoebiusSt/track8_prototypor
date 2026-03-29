@@ -1,16 +1,26 @@
 /**
- * Custom hook for keyboard input mapping to device actions
- * Maps numpad keys to Track8 device controls
+ * Keyboard mapping from desktop keys to Track8 hardware actions
  */
 
 import { useEffect } from 'react';
 import { useDevice } from '../state/DeviceContext';
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!target || !(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  return target.isContentEditable;
+}
+
+const F_KEYS = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8'] as const;
 
 export function useKeyboardInput() {
   const { dispatch } = useDevice();
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.repeat || isEditableTarget(event.target)) return;
+
       const code = event.code;
 
       if (code === 'Numpad0') {
@@ -19,19 +29,32 @@ export function useKeyboardInput() {
         return;
       }
 
+      if (code === 'NumpadDecimal' || code === 'Comma') {
+        event.preventDefault();
+        dispatch({ type: 'TOGGLE_PLAY' });
+        return;
+      }
+
+      if (code === 'ArrowLeft') {
+        event.preventDefault();
+        dispatch({ type: 'ADJUST_POSITION', payload: -1.2 });
+        return;
+      }
+
+      if (code === 'ArrowRight') {
+        event.preventDefault();
+        dispatch({ type: 'ADJUST_POSITION', payload: 1.2 });
+        return;
+      }
+
+      const fk = F_KEYS.indexOf(code as (typeof F_KEYS)[number]);
+      if (fk !== -1) {
+        event.preventDefault();
+        dispatch({ type: 'ENCODER_PRESS', payload: fk });
+        return;
+      }
+
       switch (code) {
-        case 'NumpadDecimal':
-          event.preventDefault();
-          dispatch({ type: 'TOGGLE_PLAY' });
-          break;
-        case 'ArrowLeft':
-          event.preventDefault();
-          dispatch({ type: 'SWITCH_SCREEN', payload: 'audio' });
-          break;
-        case 'ArrowRight':
-          event.preventDefault();
-          dispatch({ type: 'SWITCH_SCREEN', payload: 'settings' });
-          break;
         case 'Numpad1':
           event.preventDefault();
           dispatch({ type: 'TOGGLE_LOOP' });
@@ -80,25 +103,14 @@ export function useKeyboardInput() {
           event.preventDefault();
           dispatch({ type: 'TOGGLE_TRACK_ARM', payload: 7 });
           break;
-        case 'F1':
-        case 'F2':
-        case 'F3':
-        case 'F4':
-        case 'F5':
-        case 'F6':
-        case 'F7':
-        case 'F8':
-          event.preventDefault();
-          break;
         default:
           break;
       }
     }
 
     function handleKeyUp(event: KeyboardEvent) {
-      const code = event.code;
-
-      if (code === 'Numpad0') {
+      if (isEditableTarget(event.target)) return;
+      if (event.code === 'Numpad0') {
         event.preventDefault();
         dispatch({ type: 'SET_SHIFT_HELD', payload: false });
       }

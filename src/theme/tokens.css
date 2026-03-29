@@ -1,13 +1,16 @@
 /* ==========================================================================
    Track8 Prototypor – Design Tokens
    Source: Thingstone Theme Editor "Dark" theme (1.1.0)
-   Display: 1280 x 400 px
+   Display: 1280 x 404 px
    ========================================================================== */
 
 :root {
   /* Display dimensions */
   --display-width: 1280px;
-  --display-height: 400px;
+  --display-height: 404px;
+
+  --color-bg-light: #32332b;
+  --color-bg-panel: #2f3028;
 
   /* ---------- Theme Editor colors ("Dark" preset) ---------- */
 

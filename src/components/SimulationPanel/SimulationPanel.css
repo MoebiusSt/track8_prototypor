@@ -1,0 +1,121 @@
+.simulation-panel {
+  margin-top: var(--gap-lg);
+  padding: var(--gap-md) var(--gap-lg);
+  max-width: calc(var(--display-width) + 24px);
+  background: var(--color-bg-panel);
+  border: var(--border-width) var(--border-style) var(--color-border);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+}
+
+.simulation-panel__header {
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  color: var(--color-encoder-text);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--gap-md);
+}
+
+.sim-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+  margin-bottom: var(--gap-md);
+  align-items: center;
+}
+
+.sim-row--transport .pixel-button {
+  min-width: 4.5rem;
+}
+
+.sim-row--tracks .pixel-button {
+  min-width: 2.75rem;
+}
+
+.sim-rec {
+  color: var(--color-record);
+  border-color: var(--color-danger);
+}
+
+.sim-rec:hover {
+  border-color: var(--color-danger);
+  color: var(--color-record);
+}
+
+.sim-encoders-wrap {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: var(--gap-sm);
+  margin-bottom: var(--gap-md);
+}
+
+.sim-encoder-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap-xs);
+  min-width: 0;
+}
+
+.sim-encoder-knob {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: var(--border-width) var(--border-style) var(--color-settings-boxes);
+  background: radial-gradient(circle at 35% 30%, #3d3e36, #1a1b17);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  cursor: ew-resize;
+  touch-action: none;
+  position: relative;
+}
+
+.sim-encoder-knob:hover {
+  border-color: var(--color-border-highlight);
+}
+
+.sim-encoder-knob--drag {
+  border-color: var(--color-accent);
+}
+
+.sim-encoder-knob__tick {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 2px;
+  height: 10px;
+  margin-left: -1px;
+  background: var(--color-encoder-text);
+  border-radius: 1px;
+}
+
+.sim-f-key {
+  width: 100%;
+  padding: var(--gap-xs) 2px;
+  font-size: 11px;
+  min-height: 2rem;
+}
+
+.sim-f-label {
+  font-family: var(--font-family);
+  font-size: 9px;
+  line-height: 1.2;
+  color: var(--color-settings-text-muted);
+  text-align: center;
+  text-transform: uppercase;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-f-label--empty {
+  min-height: 1.2em;
+}
+
+.simulation-panel__hint {
+  font-family: var(--font-family);
+  font-size: 11px;
+  color: var(--color-settings-text-muted);
+  line-height: 1.45;
+  max-width: 100%;
+}
