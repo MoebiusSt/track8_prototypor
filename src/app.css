@@ -83,6 +83,7 @@ body {
   will-change: transform;
   width: var(--total-width);
   height: calc(var(--total-keys) * var(--key-height));
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); /* S-curve easing for smooth jumps */
 }
 
 .piano-lanes-container {
