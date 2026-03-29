@@ -1,7 +1,7 @@
 :root {
   --color-bg-dark: #000000;
-  --color-white-key: #0a1105; /* Very dark green/black for white keys */
-  --color-black-key: #1f4014; /* Dark green for black keys */
+  --color-white-key: #1f4014; /* Dark green for white keys */
+  --color-black-key: #0a1105; /* Very dark green/black for black keys */
   --color-note: #5aff5a;      /* Bright neon green for midi notes */
   --color-note-border: #80ff80;
   --color-text: #ffffff;

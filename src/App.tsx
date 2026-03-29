@@ -10,9 +10,12 @@ const SCROLL_STEP_Y = KEY_HEIGHT;
 
 const GRID_OPTIONS = [
   { label: 'Fine (10px)', value: 10 },
+  { label: '1/32 (12.5px)', value: 12.5 },
   { label: '1/16 (25px)', value: 25 },
   { label: '1/8 (50px)', value: 50 },
   { label: '1/4 (100px)', value: 100 },
+  { label: '1/2 (200px)', value: 200 },
+  { label: '1/1 (400px)', value: 400 },
 ];
 
 interface MidiNote {
@@ -61,7 +64,8 @@ export const App: React.FC = () => {
   const [scrollX, setScrollX] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [isSnapEnabled, setIsSnapEnabled] = useState(false);
-  const [gridSize, setGridSize] = useState(50); // Default to 1/8 (50px)
+  const [gridIndex, setGridIndex] = useState(3); // Default to 1/8 (index 3)
+  const gridSize = GRID_OPTIONS[gridIndex].value;
   
   const notes = useRef(generateSampleNotes()).current;
   
@@ -166,15 +170,16 @@ export const App: React.FC = () => {
           SNAP
         </button>
         <label>
-          GRID:
-          <select 
-            value={gridSize} 
-            onChange={(e) => setGridSize(Number(e.target.value))}
-          >
-            {GRID_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+          GRID: {GRID_OPTIONS[gridIndex].label}
+          <input 
+            type="range"
+            min={0}
+            max={GRID_OPTIONS.length - 1}
+            step={1}
+            value={gridIndex} 
+            onChange={(e) => setGridIndex(Number(e.target.value))}
+            style={{ marginLeft: '10px', cursor: 'pointer' }}
+          />
         </label>
       </div>
       <div className="piano-roll-viewport">
