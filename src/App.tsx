@@ -110,6 +110,7 @@ export const App: React.FC = () => {
   const [scrollY, setScrollY] = useState(0);
   const [isSnapEnabled, setIsSnapEnabled] = useState(false);
   const [isAnimated, setIsAnimated] = useState(true);
+  const [snapMode, setSnapMode] = useState<'directional' | 'intent_weighted'>('intent_weighted');
   const [gridIndex, setGridIndex] = useState(3); // Default to 1/8 (index 3)
   const gridSize = GRID_OPTIONS[gridIndex].value;
   
@@ -145,57 +146,90 @@ export const App: React.FC = () => {
       const cy = scrollPos.current.y + VISIBLE_HEIGHT / 2;
 
       let bestNote: MidiNote | null = null;
-      let bestScore = Infinity;
 
-      for (const note of notes) {
-        // Calculate the center of the note for more accurate distance perception
-        const noteX = note.startTime + note.duration / 2;
-        const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
+      if (snapMode === 'directional') {
+        let minPrimaryDist = Infinity;
+        let minSecondaryDist = Infinity;
 
-        const dx = noteX - cx;
-        const dy = noteY - cy;
-        
-        let isEligible = false;
+        for (const note of notes) {
+          const noteX = note.startTime; // Left edge
+          const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
 
-        // Check if note is in the general direction of intent
-        if (direction === 'right' && dx > 0) isEligible = true;
-        if (direction === 'left' && dx < 0) isEligible = true;
-        if (direction === 'down' && dy > 0) isEligible = true;
-        if (direction === 'up' && dy < 0) isEligible = true;
+          let primaryDist = Infinity;
+          let secondaryDist = Infinity;
 
-        if (isEligible) {
-          // Normalize the distances so X (time) and Y (pitch) can be compared fairly.
-          // 1 key height (8px) is roughly equivalent to a 16th note (25px) in terms of user perception
-          const Y_WEIGHT = 25 / 8; 
-          
-          const normDx = Math.abs(dx);
-          const normDy = Math.abs(dy) * Y_WEIGHT;
-
-          // Calculate Euclidean distance in this normalized space
-          const distance = Math.sqrt(normDx * normDx + normDy * normDy);
-
-          // We heavily penalize notes that deviate too much from the PRIMARY axis of intent.
-          // If the user pressed Right, they want to go Right. A note that is slightly right but VERY far up
-          // shouldn't be picked over a note that is further right but on the same pitch line.
-          // We apply a multiplier to the secondary axis to make the cone of vision narrower and more directional.
-          let score = 0;
-          const PENALTY_MULTIPLIER = 3.0; // Make the off-axis distance cost 3x more
-
-          if (direction === 'left' || direction === 'right') {
-             score = distance + (normDy * PENALTY_MULTIPLIER);
-          } else {
-             score = distance + (normDx * PENALTY_MULTIPLIER);
+          if (direction === 'right' && noteX > cx + 1) {
+            primaryDist = noteX - cx;
+            secondaryDist = Math.abs(noteY - cy);
+          } else if (direction === 'left' && noteX < cx - 1) {
+            primaryDist = cx - noteX;
+            secondaryDist = Math.abs(noteY - cy);
+          } else if (direction === 'up' && noteY < cy - 1) {
+            primaryDist = cy - noteY;
+            secondaryDist = Math.abs(noteX - cx);
+          } else if (direction === 'down' && noteY > cy + 1) {
+            primaryDist = noteY - cy;
+            secondaryDist = Math.abs(noteX - cx);
           }
 
-          if (score < bestScore) {
-            bestScore = score;
+          if (primaryDist < minPrimaryDist) {
+            minPrimaryDist = primaryDist;
+            minSecondaryDist = secondaryDist;
             bestNote = note;
+          } else if (primaryDist === minPrimaryDist && secondaryDist < minSecondaryDist) {
+            minSecondaryDist = secondaryDist;
+            bestNote = note;
+          }
+        }
+      } else if (snapMode === 'intent_weighted') {
+        let bestScore = Infinity;
+
+        for (const note of notes) {
+          // Calculate distance to the left edge of the note
+          const noteX = note.startTime;
+          const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
+
+          const dx = noteX - cx;
+          const dy = noteY - cy;
+          
+          let isEligible = false;
+
+          // Check if note is in the general direction of intent
+          if (direction === 'right' && dx > 0) isEligible = true;
+          if (direction === 'left' && dx < 0) isEligible = true;
+          if (direction === 'down' && dy > 0) isEligible = true;
+          if (direction === 'up' && dy < 0) isEligible = true;
+
+          if (isEligible) {
+            // Normalize the distances so X (time) and Y (pitch) can be compared fairly.
+            // 1 key height (8px) is roughly equivalent to a 16th note (25px) in terms of user perception
+            const Y_WEIGHT = 25 / 8; 
+            
+            const normDx = Math.abs(dx);
+            const normDy = Math.abs(dy) * Y_WEIGHT;
+
+            // Calculate Euclidean distance in this normalized space
+            const distance = Math.sqrt(normDx * normDx + normDy * normDy);
+
+            let score = 0;
+            const PENALTY_MULTIPLIER = 3.0; // Make the off-axis distance cost 3x more
+
+            if (direction === 'left' || direction === 'right') {
+               score = distance + (normDy * PENALTY_MULTIPLIER);
+            } else {
+               score = distance + (normDx * PENALTY_MULTIPLIER);
+            }
+
+            if (score < bestScore) {
+              bestScore = score;
+              bestNote = note;
+            }
           }
         }
       }
 
       if (bestNote) {
-        const targetX = bestNote.startTime + bestNote.duration / 2;
+        const targetX = bestNote.startTime;
         const targetY = (127 - bestNote.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
         
         setScrollX(clampX(targetX - VISIBLE_WIDTH / 2));
@@ -281,6 +315,16 @@ export const App: React.FC = () => {
   return (
     <div className="app-container">
       <div className="controls-bar">
+        <label>
+          Snap Mode:
+          <select 
+            value={snapMode} 
+            onChange={(e) => setSnapMode(e.target.value as 'directional' | 'intent_weighted')}
+          >
+            <option value="directional">Directional (Nearest)</option>
+            <option value="intent_weighted">Intent Weighted</option>
+          </select>
+        </label>
         <button 
           className={isSnapEnabled ? 'active' : ''} 
           onClick={() => setIsSnapEnabled(!isSnapEnabled)}
@@ -331,6 +375,16 @@ export const App: React.FC = () => {
       <div className="instructions">
         Scroll: Arrow Keys (Up, Down, Left, Right)
       </div>
+      {isSnapEnabled && (
+        <div className="snap-description">
+          {snapMode === 'directional' && (
+            <p><strong>Directional Mode:</strong> Searches strictly for the nearest note in the pressed direction based on Euclidean distance to its start edge. Can lead to unintuitive jumps if a note is horizontally far but vertically close.</p>
+          )}
+          {snapMode === 'intent_weighted' && (
+            <p><strong>Intent Weighted Mode:</strong> Prioritizes notes that lie along the axis of your pressed arrow key. Deviations from the main scroll direction are heavily penalized (Cone of vision). Always snaps to the start edge of the note.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 };
