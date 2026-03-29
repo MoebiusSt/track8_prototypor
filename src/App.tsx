@@ -113,6 +113,11 @@ export const App: React.FC = () => {
   const gridSize = GRID_OPTIONS[gridIndex].value;
   
   const notes = useRef(generateSampleNotes()).current;
+  const scrollPos = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    scrollPos.current = { x: scrollX, y: scrollY };
+  }, [scrollX, scrollY]);
   
   useEffect(() => {
     // Initial scroll position: center around C4 (note 60)
@@ -131,35 +136,87 @@ export const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const clampX = (val: number) => Math.max(-VISIBLE_WIDTH / 2, Math.min(TOTAL_WIDTH - VISIBLE_WIDTH / 2, val));
+    const clampY = (val: number) => Math.max(-VISIBLE_HEIGHT / 2, Math.min(TOTAL_KEYS * KEY_HEIGHT - VISIBLE_HEIGHT / 2, val));
+
+    const snapToNote = (direction: 'up' | 'down' | 'left' | 'right') => {
+      const cx = scrollPos.current.x + VISIBLE_WIDTH / 2;
+      const cy = scrollPos.current.y + VISIBLE_HEIGHT / 2;
+
+      let bestNote: MidiNote | null = null;
+      let minPrimaryDist = Infinity;
+      let minSecondaryDist = Infinity;
+
+      for (const note of notes) {
+        const noteX = note.startTime;
+        const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
+
+        let primaryDist = Infinity;
+        let secondaryDist = Infinity;
+
+        if (direction === 'right' && noteX > cx + 1) {
+          primaryDist = noteX - cx;
+          secondaryDist = Math.abs(noteY - cy);
+        } else if (direction === 'left' && noteX < cx - 1) {
+          primaryDist = cx - noteX;
+          secondaryDist = Math.abs(noteY - cy);
+        } else if (direction === 'up' && noteY < cy - 1) {
+          primaryDist = cy - noteY;
+          secondaryDist = Math.abs(noteX - cx);
+        } else if (direction === 'down' && noteY > cy + 1) {
+          primaryDist = noteY - cy;
+          secondaryDist = Math.abs(noteX - cx);
+        }
+
+        if (primaryDist < minPrimaryDist) {
+          minPrimaryDist = primaryDist;
+          minSecondaryDist = secondaryDist;
+          bestNote = note;
+        } else if (primaryDist === minPrimaryDist && secondaryDist < minSecondaryDist) {
+          minSecondaryDist = secondaryDist;
+          bestNote = note;
+        }
+      }
+
+      if (bestNote) {
+        const targetX = bestNote.startTime;
+        const targetY = (127 - bestNote.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
+        
+        setScrollX(clampX(targetX - VISIBLE_WIDTH / 2));
+        setScrollY(clampY(targetY - VISIBLE_HEIGHT / 2));
+      }
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
       }
 
-      if (e.key === 'ArrowUp') {
-        setScrollY((prev) => Math.max(0, prev - SCROLL_STEP_Y));
-      } else if (e.key === 'ArrowDown') {
-        setScrollY((prev) => Math.min(TOTAL_KEYS * KEY_HEIGHT - VISIBLE_HEIGHT, prev + SCROLL_STEP_Y));
-      } else if (e.key === 'ArrowLeft') {
-        if (!isSnapEnabled) {
-          setScrollX((prev) => Math.max(0, prev - gridSize));
+      if (isSnapEnabled) {
+        if (e.key === 'ArrowUp') snapToNote('up');
+        else if (e.key === 'ArrowDown') snapToNote('down');
+        else if (e.key === 'ArrowLeft') snapToNote('left');
+        else if (e.key === 'ArrowRight') snapToNote('right');
+      } else {
+        if (e.key === 'ArrowUp') {
+          setScrollY((prev) => clampY(prev - SCROLL_STEP_Y));
+        } else if (e.key === 'ArrowDown') {
+          setScrollY((prev) => clampY(prev + SCROLL_STEP_Y));
+        } else if (e.key === 'ArrowLeft') {
+          setScrollX((prev) => clampX(prev - gridSize));
+        } else if (e.key === 'ArrowRight') {
+          setScrollX((prev) => clampX(prev + gridSize));
         }
-        // SNAP behavior will be added later
-      } else if (e.key === 'ArrowRight') {
-        if (!isSnapEnabled) {
-          setScrollX((prev) => Math.min(TOTAL_WIDTH - VISIBLE_WIDTH, prev + gridSize));
-        }
-        // SNAP behavior will be added later
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSnapEnabled, gridSize]);
+  }, [isSnapEnabled, gridSize, notes]);
 
   const renderBackground = () => {
     const lanes = [];
-    const startLane = Math.floor(scrollY / KEY_HEIGHT);
+    const startLane = Math.max(0, Math.floor(scrollY / KEY_HEIGHT));
     const endLane = Math.min(TOTAL_KEYS - 1, Math.ceil((scrollY + VISIBLE_HEIGHT) / KEY_HEIGHT));
 
     for (let i = startLane; i <= endLane; i++) {

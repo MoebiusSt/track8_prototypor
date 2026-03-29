@@ -11,7 +11,7 @@
   --key-height: 8px;
   --total-width: 5000px;
   --total-keys: 128;
-  --color-crosshair: #ff8800;
+  --color-crosshair: #ffa034;
 }
 
 body {
@@ -139,6 +139,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0.7;
 }
 
 .instructions {
