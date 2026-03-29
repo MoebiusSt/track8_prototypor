@@ -17,6 +17,8 @@ const GRID_OPTIONS = [
   { label: '1/32 (12.5px)', value: 12.5 },
 ];
 
+type SnapMode = 'nearest' | 'directional' | 'axis_priority';
+
 interface MidiNote {
   id: string;
   noteNumber: number;
@@ -46,21 +48,20 @@ const generateSampleNotes = (): MidiNote[] => {
 
   const beat = 100;
 
-  // A more complex 8-bar progression repeated twice
   const progressions = [
-    { root: 48, quality: 'major' }, // C
-    { root: 55, quality: 'major' }, // G
-    { root: 57, quality: 'minor' }, // Am
-    { root: 53, quality: 'major' }, // F
-    { root: 48, quality: 'major' }, // C
-    { root: 55, quality: 'major' }, // G
-    { root: 53, quality: 'major' }, // F
-    { root: 53, quality: 'major' }, // F
+    { root: 48, quality: 'major' },
+    { root: 55, quality: 'major' },
+    { root: 57, quality: 'minor' },
+    { root: 53, quality: 'major' },
+    { root: 48, quality: 'major' },
+    { root: 55, quality: 'major' },
+    { root: 53, quality: 'major' },
+    { root: 53, quality: 'major' },
   ];
 
   const getChordNotes = (root: number, quality: string) => {
     if (quality === 'major') return [root, root + 4, root + 7, root + 12];
-    return [root, root + 3, root + 7, root + 12]; // minor
+    return [root, root + 3, root + 7, root + 12];
   };
 
   for (let bar = 0; bar < 16; bar++) {
@@ -68,21 +69,17 @@ const generateSampleNotes = (): MidiNote[] => {
     const chord = getChordNotes(prog.root, prog.quality);
     const barStart = bar * beat * 4;
 
-    // Left hand: Low bass note, sustained
-    addNote(chord[0] - 12, barStart, beat * 4 + beat * 0.5); // Sustain into next bar
+    addNote(chord[0] - 12, barStart, beat * 4 + beat * 0.5);
     
-    // Left hand: Broken chord, overlapping
     addNote(chord[0], barStart + beat * 0.5, beat * 1.5);
-    addNote(chord[1], barStart + beat * 1.0, beat * 3.5); // overlapping heavily
-    addNote(chord[2], barStart + beat * 1.5, beat * 2.8); // overlapping
+    addNote(chord[1], barStart + beat * 1.0, beat * 3.5);
+    addNote(chord[2], barStart + beat * 1.5, beat * 2.8);
     
-    // Right hand: Block chord played slightly "rolled" (strummed)
     const rollOffset = 5;
     addNote(chord[1] + 12, barStart + beat * 2.0 + rollOffset * 0, beat * 1.5);
     addNote(chord[2] + 12, barStart + beat * 2.0 + rollOffset * 1, beat * 1.5);
-    addNote(chord[3] + 12, barStart + beat * 2.0 + rollOffset * 2, beat * 1.5 + beat * 0.2); // rings out slightly longer
+    addNote(chord[3] + 12, barStart + beat * 2.0 + rollOffset * 2, beat * 1.5 + beat * 0.2);
 
-    // Right hand: Melody spanning multiple octaves and notes
     const mBase = chord[3] + 12;
     if (bar % 2 === 0) {
       addNote(mBase, barStart + beat * 0.0, beat * 0.8);
@@ -93,16 +90,30 @@ const generateSampleNotes = (): MidiNote[] => {
       addNote(mBase + 7, barStart + beat * 0.0, beat * 0.3);
       addNote(mBase + 5, barStart + beat * 0.5, beat * 0.3);
       addNote(mBase + 4, barStart + beat * 1.0, beat * 0.8);
-      
-      // Fast run
       addNote(mBase + 2, barStart + beat * 2.0, beat * 0.2);
       addNote(mBase + 4, barStart + beat * 2.2, beat * 0.2);
       addNote(mBase + 5, barStart + beat * 2.4, beat * 0.2);
-      addNote(mBase + 7, barStart + beat * 2.6, beat * 1.4); // rings out
+      addNote(mBase + 7, barStart + beat * 2.6, beat * 1.4);
     }
   }
 
   return notes;
+};
+
+const getNotePos = (note: MidiNote) => ({
+  x: note.startTime,
+  y: (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2
+});
+
+const isInDirection = (dx: number, dy: number, direction: string): boolean => {
+  const THRESHOLD = 0.5;
+  switch (direction) {
+    case 'right': return dx > THRESHOLD;
+    case 'left': return dx < -THRESHOLD;
+    case 'down': return dy > THRESHOLD;
+    case 'up': return dy < -THRESHOLD;
+    default: return false;
+  }
 };
 
 export const App: React.FC = () => {
@@ -110,8 +121,8 @@ export const App: React.FC = () => {
   const [scrollY, setScrollY] = useState(0);
   const [isSnapEnabled, setIsSnapEnabled] = useState(false);
   const [isAnimated, setIsAnimated] = useState(true);
-  const [snapMode, setSnapMode] = useState<'directional' | 'intent_weighted' | 'ellipsoid' | 'orthogonal' | 'reversible'>('reversible');
-  const [gridIndex, setGridIndex] = useState(3); // Default to 1/8 (index 3)
+  const [snapMode, setSnapMode] = useState<SnapMode>('nearest');
+  const [gridIndex, setGridIndex] = useState(3);
   const gridSize = GRID_OPTIONS[gridIndex].value;
   
   const notes = useRef(generateSampleNotes()).current;
@@ -122,18 +133,9 @@ export const App: React.FC = () => {
   }, [scrollX, scrollY]);
   
   useEffect(() => {
-    // Initial scroll position: center around C4 (note 60)
-    // The crosshair is at VISIBLE_HEIGHT / 2 = 200px.
-    // To make crosshair fall exactly in the middle of a key,
-    // scrollY should be such that the key's middle is at scrollY + 200.
-    // C4 top Y = (127 - 60) * 16 = 1072.
-    // C4 middle Y = 1072 + 8 = 1080.
-    // So we want scrollY + 200 = 1080 => scrollY = 880.
-    // 880 is a multiple of 16, which is good.
     const c4TopY = (127 - 60) * KEY_HEIGHT;
     const c4MiddleY = c4TopY + KEY_HEIGHT / 2;
     const initialScrollY = c4MiddleY - VISIBLE_HEIGHT / 2;
-    
     setScrollY(initialScrollY);
   }, []);
 
@@ -144,214 +146,59 @@ export const App: React.FC = () => {
     const snapToNote = (direction: 'up' | 'down' | 'left' | 'right') => {
       const cx = scrollPos.current.x + VISIBLE_WIDTH / 2;
       const cy = scrollPos.current.y + VISIBLE_HEIGHT / 2;
+      const isHorizontal = direction === 'left' || direction === 'right';
 
       let bestNote: MidiNote | null = null;
+      let bestScore = Infinity;
 
-      if (snapMode === 'directional') {
-        let minPrimaryDist = Infinity;
-        let minSecondaryDist = Infinity;
+      for (const note of notes) {
+        const pos = getNotePos(note);
+        const dx = pos.x - cx;
+        const dy = pos.y - cy;
 
-        for (const note of notes) {
-          const noteX = note.startTime; // Left edge
-          const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
+        if (!isInDirection(dx, dy, direction)) continue;
 
-          let primaryDist = Infinity;
-          let secondaryDist = Infinity;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        let score = Infinity;
 
-          if (direction === 'right' && noteX > cx + 1) {
-            primaryDist = noteX - cx;
-            secondaryDist = Math.abs(noteY - cy);
-          } else if (direction === 'left' && noteX < cx - 1) {
-            primaryDist = cx - noteX;
-            secondaryDist = Math.abs(noteY - cy);
-          } else if (direction === 'up' && noteY < cy - 1) {
-            primaryDist = cy - noteY;
-            secondaryDist = Math.abs(noteX - cx);
-          } else if (direction === 'down' && noteY > cy + 1) {
-            primaryDist = noteY - cy;
-            secondaryDist = Math.abs(noteX - cx);
-          }
+        if (snapMode === 'nearest') {
+          // Pure Manhattan distance in raw pixels.
+          // What the user sees is what the algorithm uses.
+          score = absDx + absDy;
 
-          if (primaryDist < minPrimaryDist) {
-            minPrimaryDist = primaryDist;
-            minSecondaryDist = secondaryDist;
-            bestNote = note;
-          } else if (primaryDist === minPrimaryDist && secondaryDist < minSecondaryDist) {
-            minSecondaryDist = secondaryDist;
-            bestNote = note;
-          }
-        }
-      } else if (snapMode === 'intent_weighted') {
-        let bestScore = Infinity;
-
-        for (const note of notes) {
-          // Calculate distance to the left edge of the note
-          const noteX = note.startTime;
-          const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
-
-          const dx = noteX - cx;
-          const dy = noteY - cy;
-          
-          let isEligible = false;
-
-          // Check if note is in the general direction of intent
-          if (direction === 'right' && dx > 0) isEligible = true;
-          if (direction === 'left' && dx < 0) isEligible = true;
-          if (direction === 'down' && dy > 0) isEligible = true;
-          if (direction === 'up' && dy < 0) isEligible = true;
-
-          if (isEligible) {
-            // Normalize the distances so X (time) and Y (pitch) can be compared fairly.
-            // 1 key height (8px) is roughly equivalent to a 16th note (25px) in terms of user perception
-            const Y_WEIGHT = 25 / 8; 
-            
-            const normDx = Math.abs(dx);
-            const normDy = Math.abs(dy) * Y_WEIGHT;
-
-            // Calculate Euclidean distance in this normalized space
-            const distance = Math.sqrt(normDx * normDx + normDy * normDy);
-
-            let score = 0;
-            const PENALTY_MULTIPLIER = 3.0; // Make the off-axis distance cost 3x more
-
-            if (direction === 'left' || direction === 'right') {
-               score = distance + (normDy * PENALTY_MULTIPLIER);
-            } else {
-               score = distance + (normDx * PENALTY_MULTIPLIER);
-            }
-
-            if (score < bestScore) {
-              bestScore = score;
-              bestNote = note;
-            }
-          }
-        }
-      } else if (snapMode === 'ellipsoid') {
-        let bestScore = Infinity;
-
-        for (const note of notes) {
-          const noteX = note.startTime;
-          const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
-
-          const dx = noteX - cx;
-          const dy = noteY - cy;
-          
-          let isEligible = false;
-          if (direction === 'right' && dx > 0) isEligible = true;
-          if (direction === 'left' && dx < 0) isEligible = true;
-          if (direction === 'down' && dy > 0) isEligible = true;
-          if (direction === 'up' && dy < 0) isEligible = true;
-
-          if (isEligible) {
-            const normDx = Math.abs(dx);
-            const normDy = Math.abs(dy) * (25 / 8); 
-
-            let score = 0;
-            if (direction === 'left' || direction === 'right') {
-               // Time is primary. We squish the Y axis penalty so pitch jumps are "cheaper".
-               score = Math.sqrt(Math.pow(normDx, 2) + Math.pow(normDy * 0.25, 2));
-            } else {
-               // Pitch is primary. We squish the X axis penalty so time jumps are "cheaper".
-               score = Math.sqrt(Math.pow(normDy, 2) + Math.pow(normDx * 0.25, 2));
-            }
-
-            if (score < bestScore) {
-              bestScore = score;
-              bestNote = note;
-            }
-          }
-        }
-      } else if (snapMode === 'orthogonal') {
-        let bestScore1 = Infinity;
-        let bestScore2 = Infinity;
-
-        for (const note of notes) {
-          const noteX = note.startTime;
-          const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
-
-          const dx = noteX - cx;
-          const dy = noteY - cy;
-          
-          let isEligible = false;
-          if (direction === 'right' && dx > 0) isEligible = true;
-          if (direction === 'left' && dx < 0) isEligible = true;
-          if (direction === 'down' && dy > 0) isEligible = true;
-          if (direction === 'up' && dy < 0) isEligible = true;
-
-          if (isEligible) {
-            let primary = 0;
-            let secondary = 0;
-            
-            if (direction === 'left' || direction === 'right') {
-               primary = Math.abs(dx);
-               secondary = Math.abs(dy);
-            } else {
-               primary = Math.abs(dy);
-               secondary = Math.abs(dx);
-            }
-
-            if (primary < bestScore1) {
-              bestScore1 = primary;
-              bestScore2 = secondary;
-              bestNote = note;
-            } else if (primary === bestScore1 && secondary < bestScore2) {
-              bestScore2 = secondary;
-              bestNote = note;
-            }
-          }
-        }
-      } else if (snapMode === 'reversible') {
-        // Find the absolute closest note to current position (if perfectly snapped, distance is 0)
-        let closestNote = notes[0];
-        let minDist = Infinity;
-        for (const n of notes) {
-          const nx = n.startTime;
-          const ny = (127 - n.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
-          const d = Math.pow(nx - cx, 2) + Math.pow(ny - cy, 2);
-          if (d < minDist) {
-            minDist = d;
-            closestNote = n;
-          }
-        }
-
-        if (closestNote) {
-          if (direction === 'left' || direction === 'right') {
-            const sortedByX = [...notes].sort((a, b) => {
-              if (a.startTime !== b.startTime) return a.startTime - b.startTime;
-              return b.noteNumber - a.noteNumber; // tie breaker: higher pitch first
-            });
-            const idx = sortedByX.findIndex(n => n.id === closestNote.id);
-            if (direction === 'right' && idx < sortedByX.length - 1) {
-              bestNote = sortedByX[idx + 1];
-            } else if (direction === 'left' && idx > 0) {
-              bestNote = sortedByX[idx - 1];
-            }
+        } else if (snapMode === 'directional') {
+          // Manhattan distance, but the off-axis costs 2x.
+          // This creates a preference for notes aligned with the pressed direction
+          // without being extreme. A note 50px ahead and 0 off-axis (score=50) beats
+          // a note 20px ahead but 20px off-axis (score=20+40=60).
+          if (isHorizontal) {
+            score = absDx + absDy * 2;
           } else {
-            const sortedByY = [...notes].sort((a, b) => {
-              // Y is visual coordinate (smaller Y = higher pitch)
-              const yA = (127 - a.noteNumber) * KEY_HEIGHT;
-              const yB = (127 - b.noteNumber) * KEY_HEIGHT;
-              if (yA !== yB) return yA - yB;
-              return a.startTime - b.startTime; // tie breaker: earlier time first
-            });
-            const idx = sortedByY.findIndex(n => n.id === closestNote.id);
-            if (direction === 'down' && idx < sortedByY.length - 1) {
-              // down means increasing visual Y -> go to next in sortedByY
-              bestNote = sortedByY[idx + 1];
-            } else if (direction === 'up' && idx > 0) {
-              // up means decreasing visual Y -> go to prev in sortedByY
-              bestNote = sortedByY[idx - 1];
-            }
+            score = absDy + absDx * 2;
           }
+
+        } else if (snapMode === 'axis_priority') {
+          // Strict primary-axis priority: the note closest on the primary axis wins.
+          // Secondary axis only used as tie-breaker (scaled down to never outweigh primary).
+          // Guaranteed reversible on the primary axis.
+          if (isHorizontal) {
+            score = absDx * 10000 + absDy;
+          } else {
+            score = absDy * 10000 + absDx;
+          }
+        }
+
+        if (score < bestScore) {
+          bestScore = score;
+          bestNote = note;
         }
       }
 
       if (bestNote) {
-        const targetX = bestNote.startTime;
-        const targetY = (127 - bestNote.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
-        
-        setScrollX(clampX(targetX - VISIBLE_WIDTH / 2));
-        setScrollY(clampY(targetY - VISIBLE_HEIGHT / 2));
+        const target = getNotePos(bestNote);
+        setScrollX(clampX(target.x - VISIBLE_WIDTH / 2));
+        setScrollY(clampY(target.y - VISIBLE_HEIGHT / 2));
       }
     };
 
@@ -380,7 +227,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSnapEnabled, gridSize, notes]);
+  }, [isSnapEnabled, snapMode, gridSize, notes]);
 
   const renderBackground = () => {
     const lanes = [];
@@ -437,13 +284,11 @@ export const App: React.FC = () => {
           Snap Mode:
           <select 
             value={snapMode} 
-            onChange={(e) => setSnapMode(e.target.value as any)}
+            onChange={(e) => setSnapMode(e.target.value as SnapMode)}
           >
-            <option value="directional">Directional (Nearest)</option>
-            <option value="intent_weighted">Cone (Strict Axis)</option>
-            <option value="ellipsoid">Ellipsoid (Balanced)</option>
-            <option value="orthogonal">Orthogonal (Strict Next)</option>
-            <option value="reversible">Strictly Reversible (1D Sequence)</option>
+            <option value="nearest">Nearest Visual</option>
+            <option value="directional">Directional Bias</option>
+            <option value="axis_priority">Axis Priority</option>
           </select>
         </label>
         <button 
@@ -498,20 +343,14 @@ export const App: React.FC = () => {
       </div>
       {isSnapEnabled && (
         <div className="snap-description">
+          {snapMode === 'nearest' && (
+            <p><strong>Nearest Visual:</strong> Finds the visually closest note in the pressed half-plane using Manhattan distance in raw screen pixels. No normalization, no weighting. What you see is what the algorithm sees.</p>
+          )}
           {snapMode === 'directional' && (
-            <p><strong>Directional Mode:</strong> Searches strictly for the nearest note in the pressed direction based on Euclidean distance to its start edge. Can lead to unintuitive jumps if a note is horizontally far but vertically close.</p>
+            <p><strong>Directional Bias:</strong> Manhattan distance but deviations from the main scroll axis cost 2x. Pressing Right prefers notes that are more to the right than off to the side. Still picks nearby off-axis notes if they are significantly closer overall.</p>
           )}
-          {snapMode === 'intent_weighted' && (
-            <p><strong>Cone (Strict Axis):</strong> Calculates true Euclidean distance (hypotenuse) but applies a penalty factor to the off-axis distance inside the calculation. It heavily prefers notes closer to the scroll axis, but won't skip notes that are overall significantly closer in space.</p>
-          )}
-          {snapMode === 'ellipsoid' && (
-            <p><strong>Ellipsoid (Balanced Voice Leading):</strong> Squishes the penalty for the off-axis. When moving Left/Right, it strongly favors the next note in time, but prefers closer pitches if multiple notes occur soon. When moving Up/Down, favors the next pitch regardless of slight time offsets.</p>
-          )}
-          {snapMode === 'orthogonal' && (
-            <p><strong>Orthogonal (Strict Next):</strong> Absolute rigid priority. Moving Right always goes to the chronologically next note, even if it is 8 octaves away. Moving Up always goes to the next higher pitch, regardless of time.</p>
-          )}
-          {snapMode === 'reversible' && (
-            <p><strong>Strictly Reversible (1D Sequence):</strong> Projects all notes into a strictly sorted 1D array (Left/Right by Time, Up/Down by Pitch). Guarantees 100% mathematical reversibility: a jump Right followed by Left will ALWAYS return to the exact same note.</p>
+          {snapMode === 'axis_priority' && (
+            <p><strong>Axis Priority:</strong> Strict primary-axis navigation. Right = chronologically next note start. Up = next higher pitch. Secondary axis only as tie-breaker. Predictable and reversible, but can jump far on the secondary axis.</p>
           )}
         </div>
       )}
