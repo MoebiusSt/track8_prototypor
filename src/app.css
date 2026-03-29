@@ -8,10 +8,10 @@
   
   --visible-width: 1280px;
   --visible-height: 400px;
-  --key-height: 16px;
+  --key-height: 8px;
   --total-width: 5000px;
   --total-keys: 128;
-  --color-crosshair: rgba(255, 100, 100, 0.6); /* Reddish slightly transparent crosshair */
+  --color-crosshair: #ff8800;
 }
 
 body {
@@ -139,20 +139,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.crosshair-h {
-  position: absolute;
-  width: 40px;
-  height: 2px;
-  background-color: var(--color-crosshair);
-}
-
-.crosshair-v {
-  position: absolute;
-  width: 2px;
-  height: 40px;
-  background-color: var(--color-crosshair);
 }
 
 .instructions {

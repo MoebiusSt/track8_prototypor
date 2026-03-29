@@ -3,19 +3,18 @@ import './app.css';
 
 const VISIBLE_WIDTH = 1280;
 const VISIBLE_HEIGHT = 400;
-const KEY_HEIGHT = 16;
+const KEY_HEIGHT = 8;
 const TOTAL_KEYS = 128;
 const TOTAL_WIDTH = 5000;
 const SCROLL_STEP_Y = KEY_HEIGHT;
 
 const GRID_OPTIONS = [
-  { label: 'Fine (10px)', value: 10 },
-  { label: '1/32 (12.5px)', value: 12.5 },
-  { label: '1/16 (25px)', value: 25 },
-  { label: '1/8 (50px)', value: 50 },
-  { label: '1/4 (100px)', value: 100 },
-  { label: '1/2 (200px)', value: 200 },
   { label: '1/1 (400px)', value: 400 },
+  { label: '1/2 (200px)', value: 200 },
+  { label: '1/4 (100px)', value: 100 },
+  { label: '1/8 (50px)', value: 50 },
+  { label: '1/16 (25px)', value: 25 },
+  { label: '1/32 (12.5px)', value: 12.5 },
 ];
 
 interface MidiNote {
@@ -195,8 +194,13 @@ export const App: React.FC = () => {
           </div>
         </div>
         <div className="crosshair">
-          <div className="crosshair-h" />
-          <div className="crosshair-v" />
+          <svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 0 21 L 21 21 L 21 0 L 25 0 L 25 25 L 0 25 Z" fill="var(--color-crosshair)" />
+            <path d="M 60 21 L 39 21 L 39 0 L 35 0 L 35 25 L 60 25 Z" fill="var(--color-crosshair)" />
+            <path d="M 0 39 L 21 39 L 21 60 L 25 60 L 25 35 L 0 35 Z" fill="var(--color-crosshair)" />
+            <path d="M 60 39 L 39 39 L 39 60 L 35 60 L 35 35 L 60 35 Z" fill="var(--color-crosshair)" />
+            <rect x="28" y="28" width="4" height="4" fill="var(--color-crosshair)" />
+          </svg>
         </div>
       </div>
       <div className="instructions">
