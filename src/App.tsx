@@ -502,7 +502,7 @@ export const App: React.FC = () => {
             <p><strong>Directional Mode:</strong> Searches strictly for the nearest note in the pressed direction based on Euclidean distance to its start edge. Can lead to unintuitive jumps if a note is horizontally far but vertically close.</p>
           )}
           {snapMode === 'intent_weighted' && (
-            <p><strong>Cone (Strict Axis):</strong> Prioritizes notes that lie along the axis of your pressed arrow key. Deviations from the main scroll direction are heavily penalized (Cone of vision). Sometimes skips the next melody note if it's too far off-axis.</p>
+            <p><strong>Cone (Strict Axis):</strong> Calculates true Euclidean distance (hypotenuse) but applies a penalty factor to the off-axis distance inside the calculation. It heavily prefers notes closer to the scroll axis, but won't skip notes that are overall significantly closer in space.</p>
           )}
           {snapMode === 'ellipsoid' && (
             <p><strong>Ellipsoid (Balanced Voice Leading):</strong> Squishes the penalty for the off-axis. When moving Left/Right, it strongly favors the next note in time, but prefers closer pitches if multiple notes occur soon. When moving Up/Down, favors the next pitch regardless of slight time offsets.</p>
