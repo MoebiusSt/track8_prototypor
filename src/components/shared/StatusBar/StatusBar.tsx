@@ -1,5 +1,5 @@
 /**
- * Status bar – bottom 20px of the device display.
+ * Status bar – bottom strip of the device display.
  * Format (matching real device): -IN- [8 track indicators] T time  B bar  storage -OUT-
  */
 
@@ -20,7 +20,7 @@ export function StatusBar() {
         {tracks.map((t) => (
           <div
             key={t.id}
-            className={`sb-track-dot ${t.armed ? 'armed' : ''}`}
+            className={`sb-track-dot ${t.armed ? 'armed' : ''} ${t.id === state.selectedTrackIndex ? 'selected' : ''}`}
           />
         ))}
       </div>

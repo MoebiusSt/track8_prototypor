@@ -1,7 +1,8 @@
 .status-bar {
   display: flex;
   align-items: center;
-  height: 20px;
+  height: var(--status-bar-height);
+  min-height: var(--status-bar-height);
   flex-shrink: 0;
   padding: 0 6px;
   background-color: var(--color-bg);
@@ -41,6 +42,11 @@
 .sb-track-dot.armed {
   background-color: var(--color-danger);
   border-color: var(--color-danger);
+}
+
+.sb-track-dot.selected {
+  box-shadow: 0 0 0 1px var(--color-audio-track-selected);
+  border-color: var(--color-audio-track-selected);
 }
 
 /* Centred transport section */

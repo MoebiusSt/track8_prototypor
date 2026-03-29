@@ -4,7 +4,6 @@
  * and named markers overlaid.
  */
 
-import { useDevice } from '../../../state/DeviceContext';
 import './BeatRuler.css';
 
 /** dB labels visible on the ruler (from left to right) */
@@ -14,11 +13,9 @@ const DB_LABELS = ['V', '-12 DB', '-10 DB', '-8 DB', '-6 DB', '-4 DB', '-2 DB', 
 const TICK_COUNT = 192;
 
 export function BeatRuler() {
-  const { state } = useDevice();
-
   return (
     <div className="beat-ruler">
-      {/* Orange dB labels row */}
+      {/* Orange dB labels row — marker names appear on the timeline strip below */}
       <div className="ruler-label-row">
         {DB_LABELS.map((lbl, i) => (
           <span
@@ -27,17 +24,6 @@ export function BeatRuler() {
             style={{ left: `${(i / (DB_LABELS.length - 1)) * 100}%` }}
           >
             {lbl}
-          </span>
-        ))}
-
-        {/* Named song markers overlaid on the label row */}
-        {state.markers.map((marker) => (
-          <span
-            key={marker.id}
-            className="ruler-marker-tag"
-            style={{ left: `${marker.position * 100}%` }}
-          >
-            {marker.label}
           </span>
         ))}
       </div>

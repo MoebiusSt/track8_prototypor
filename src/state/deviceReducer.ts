@@ -132,6 +132,11 @@ export function deviceReducer(state: DeviceState, action: DeviceAction): DeviceS
         ),
       };
 
+    case 'SELECT_TRACK': {
+      const i = Math.max(0, Math.min(7, action.payload));
+      return { ...state, selectedTrackIndex: i };
+    }
+
     case 'TOGGLE_PLAY':
       return {
         ...state,
@@ -185,7 +190,7 @@ export function deviceReducer(state: DeviceState, action: DeviceAction): DeviceS
       if (newTracks[trackIndex]) {
         newTracks[trackIndex].armed = !newTracks[trackIndex].armed;
       }
-      return { ...state, tracks: newTracks };
+      return { ...state, tracks: newTracks, selectedTrackIndex: trackIndex };
     }
 
     case 'TOGGLE_TRACK_MUTE': {

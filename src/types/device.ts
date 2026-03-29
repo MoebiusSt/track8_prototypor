@@ -45,6 +45,8 @@ export interface EncoderParam {
 export interface DeviceState {
   currentScreen: ScreenId;
   previousScreen: ScreenId;
+  /** Active track for overview (1–8); drives header + lane highlight */
+  selectedTrackIndex: number;
   tracks: Track[];
   markers: Marker[];
   transport: TransportState;

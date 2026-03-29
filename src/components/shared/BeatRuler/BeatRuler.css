@@ -4,8 +4,7 @@
   flex-shrink: 0;
   position: relative;
   overflow: hidden;
-  /* thin separator between ruler and first track */
-  border-bottom: 1px solid rgba(248, 248, 242, 0.12);
+  border-bottom: 1px solid rgba(248, 248, 242, 0.1);
 }
 
 /* ── Label row (top ~11px) ───────────────────────────────────────── */
@@ -35,22 +34,6 @@
 .ruler-db-label:first-child {
   transform: none;
   left: 2px !important;
-}
-
-/* Marker badges (song position markers) */
-.ruler-marker-tag {
-  position: absolute;
-  top: 0;
-  font-family: var(--font-family);
-  font-size: 10px;
-  line-height: 11px;
-  color: var(--color-settings-text);
-  background: rgba(139, 174, 87, 0.55);
-  padding: 0 3px;
-  white-space: nowrap;
-  transform: translateX(-50%);
-  pointer-events: none;
-  z-index: 2;
 }
 
 /* ── Tick marks row (bottom ~11px) ───────────────────────────────── */
