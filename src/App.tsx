@@ -6,8 +6,14 @@ const VISIBLE_HEIGHT = 400;
 const KEY_HEIGHT = 16;
 const TOTAL_KEYS = 128;
 const TOTAL_WIDTH = 5000;
-const SCROLL_STEP_X = 50;
 const SCROLL_STEP_Y = KEY_HEIGHT;
+
+const GRID_OPTIONS = [
+  { label: 'Fine (10px)', value: 10 },
+  { label: '1/16 (25px)', value: 25 },
+  { label: '1/8 (50px)', value: 50 },
+  { label: '1/4 (100px)', value: 100 },
+];
 
 interface MidiNote {
   id: string;
@@ -54,11 +60,24 @@ const generateSampleNotes = (): MidiNote[] => {
 export const App: React.FC = () => {
   const [scrollX, setScrollX] = useState(0);
   const [scrollY, setScrollY] = useState(0);
+  const [isSnapEnabled, setIsSnapEnabled] = useState(false);
+  const [gridSize, setGridSize] = useState(50); // Default to 1/8 (50px)
+  
   const notes = useRef(generateSampleNotes()).current;
   
   useEffect(() => {
-    const c4Y = (127 - 60) * KEY_HEIGHT;
-    const initialScrollY = Math.max(0, Math.min(c4Y - VISIBLE_HEIGHT / 2, TOTAL_KEYS * KEY_HEIGHT - VISIBLE_HEIGHT));
+    // Initial scroll position: center around C4 (note 60)
+    // The crosshair is at VISIBLE_HEIGHT / 2 = 200px.
+    // To make crosshair fall exactly in the middle of a key,
+    // scrollY should be such that the key's middle is at scrollY + 200.
+    // C4 top Y = (127 - 60) * 16 = 1072.
+    // C4 middle Y = 1072 + 8 = 1080.
+    // So we want scrollY + 200 = 1080 => scrollY = 880.
+    // 880 is a multiple of 16, which is good.
+    const c4TopY = (127 - 60) * KEY_HEIGHT;
+    const c4MiddleY = c4TopY + KEY_HEIGHT / 2;
+    const initialScrollY = c4MiddleY - VISIBLE_HEIGHT / 2;
+    
     setScrollY(initialScrollY);
   }, []);
 
@@ -73,15 +92,21 @@ export const App: React.FC = () => {
       } else if (e.key === 'ArrowDown') {
         setScrollY((prev) => Math.min(TOTAL_KEYS * KEY_HEIGHT - VISIBLE_HEIGHT, prev + SCROLL_STEP_Y));
       } else if (e.key === 'ArrowLeft') {
-        setScrollX((prev) => Math.max(0, prev - SCROLL_STEP_X));
+        if (!isSnapEnabled) {
+          setScrollX((prev) => Math.max(0, prev - gridSize));
+        }
+        // SNAP behavior will be added later
       } else if (e.key === 'ArrowRight') {
-        setScrollX((prev) => Math.min(TOTAL_WIDTH - VISIBLE_WIDTH, prev + SCROLL_STEP_X));
+        if (!isSnapEnabled) {
+          setScrollX((prev) => Math.min(TOTAL_WIDTH - VISIBLE_WIDTH, prev + gridSize));
+        }
+        // SNAP behavior will be added later
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isSnapEnabled, gridSize]);
 
   const renderBackground = () => {
     const lanes = [];
@@ -133,6 +158,25 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
+      <div className="controls-bar">
+        <button 
+          className={isSnapEnabled ? 'active' : ''} 
+          onClick={() => setIsSnapEnabled(!isSnapEnabled)}
+        >
+          SNAP
+        </button>
+        <label>
+          GRID:
+          <select 
+            value={gridSize} 
+            onChange={(e) => setGridSize(Number(e.target.value))}
+          >
+            {GRID_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="piano-roll-viewport">
         <div 
           className="piano-roll-content"
@@ -144,6 +188,10 @@ export const App: React.FC = () => {
           <div className="midi-notes-container">
             {renderNotes()}
           </div>
+        </div>
+        <div className="crosshair">
+          <div className="crosshair-h" />
+          <div className="crosshair-v" />
         </div>
       </div>
       <div className="instructions">
