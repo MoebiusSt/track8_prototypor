@@ -110,7 +110,7 @@ export const App: React.FC = () => {
   const [scrollY, setScrollY] = useState(0);
   const [isSnapEnabled, setIsSnapEnabled] = useState(false);
   const [isAnimated, setIsAnimated] = useState(true);
-  const [snapMode, setSnapMode] = useState<'directional' | 'intent_weighted'>('intent_weighted');
+  const [snapMode, setSnapMode] = useState<'directional' | 'intent_weighted' | 'ellipsoid' | 'orthogonal'>('ellipsoid');
   const [gridIndex, setGridIndex] = useState(3); // Default to 1/8 (index 3)
   const gridSize = GRID_OPTIONS[gridIndex].value;
   
@@ -226,6 +226,80 @@ export const App: React.FC = () => {
             }
           }
         }
+      } else if (snapMode === 'ellipsoid') {
+        let bestScore = Infinity;
+
+        for (const note of notes) {
+          const noteX = note.startTime;
+          const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
+
+          const dx = noteX - cx;
+          const dy = noteY - cy;
+          
+          let isEligible = false;
+          if (direction === 'right' && dx > 0) isEligible = true;
+          if (direction === 'left' && dx < 0) isEligible = true;
+          if (direction === 'down' && dy > 0) isEligible = true;
+          if (direction === 'up' && dy < 0) isEligible = true;
+
+          if (isEligible) {
+            const normDx = Math.abs(dx);
+            const normDy = Math.abs(dy) * (25 / 8); 
+
+            let score = 0;
+            if (direction === 'left' || direction === 'right') {
+               // Time is primary. We squish the Y axis penalty so pitch jumps are "cheaper".
+               score = Math.sqrt(Math.pow(normDx, 2) + Math.pow(normDy * 0.25, 2));
+            } else {
+               // Pitch is primary. We squish the X axis penalty so time jumps are "cheaper".
+               score = Math.sqrt(Math.pow(normDy, 2) + Math.pow(normDx * 0.25, 2));
+            }
+
+            if (score < bestScore) {
+              bestScore = score;
+              bestNote = note;
+            }
+          }
+        }
+      } else if (snapMode === 'orthogonal') {
+        let bestScore1 = Infinity;
+        let bestScore2 = Infinity;
+
+        for (const note of notes) {
+          const noteX = note.startTime;
+          const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
+
+          const dx = noteX - cx;
+          const dy = noteY - cy;
+          
+          let isEligible = false;
+          if (direction === 'right' && dx > 0) isEligible = true;
+          if (direction === 'left' && dx < 0) isEligible = true;
+          if (direction === 'down' && dy > 0) isEligible = true;
+          if (direction === 'up' && dy < 0) isEligible = true;
+
+          if (isEligible) {
+            let primary = 0;
+            let secondary = 0;
+            
+            if (direction === 'left' || direction === 'right') {
+               primary = Math.abs(dx);
+               secondary = Math.abs(dy);
+            } else {
+               primary = Math.abs(dy);
+               secondary = Math.abs(dx);
+            }
+
+            if (primary < bestScore1) {
+              bestScore1 = primary;
+              bestScore2 = secondary;
+              bestNote = note;
+            } else if (primary === bestScore1 && secondary < bestScore2) {
+              bestScore2 = secondary;
+              bestNote = note;
+            }
+          }
+        }
       }
 
       if (bestNote) {
@@ -319,10 +393,12 @@ export const App: React.FC = () => {
           Snap Mode:
           <select 
             value={snapMode} 
-            onChange={(e) => setSnapMode(e.target.value as 'directional' | 'intent_weighted')}
+            onChange={(e) => setSnapMode(e.target.value as any)}
           >
             <option value="directional">Directional (Nearest)</option>
-            <option value="intent_weighted">Intent Weighted</option>
+            <option value="intent_weighted">Cone (Strict Axis)</option>
+            <option value="ellipsoid">Ellipsoid (Balanced)</option>
+            <option value="orthogonal">Orthogonal (Strict Next)</option>
           </select>
         </label>
         <button 
@@ -381,7 +457,13 @@ export const App: React.FC = () => {
             <p><strong>Directional Mode:</strong> Searches strictly for the nearest note in the pressed direction based on Euclidean distance to its start edge. Can lead to unintuitive jumps if a note is horizontally far but vertically close.</p>
           )}
           {snapMode === 'intent_weighted' && (
-            <p><strong>Intent Weighted Mode:</strong> Prioritizes notes that lie along the axis of your pressed arrow key. Deviations from the main scroll direction are heavily penalized (Cone of vision). Always snaps to the start edge of the note.</p>
+            <p><strong>Cone (Strict Axis):</strong> Prioritizes notes that lie along the axis of your pressed arrow key. Deviations from the main scroll direction are heavily penalized (Cone of vision). Sometimes skips the next melody note if it's too far off-axis.</p>
+          )}
+          {snapMode === 'ellipsoid' && (
+            <p><strong>Ellipsoid (Balanced Voice Leading):</strong> Squishes the penalty for the off-axis. When moving Left/Right, it strongly favors the next note in time, but prefers closer pitches if multiple notes occur soon. When moving Up/Down, favors the next pitch regardless of slight time offsets.</p>
+          )}
+          {snapMode === 'orthogonal' && (
+            <p><strong>Orthogonal (Strict Next):</strong> Absolute rigid priority. Moving Right always goes to the chronologically next note, even if it is 8 octaves away. Moving Up always goes to the next higher pitch, regardless of time.</p>
           )}
         </div>
       )}
