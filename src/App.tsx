@@ -144,42 +144,57 @@ export const App: React.FC = () => {
       const cy = scrollPos.current.y + VISIBLE_HEIGHT / 2;
 
       let bestNote: MidiNote | null = null;
-      let minPrimaryDist = Infinity;
-      let minSecondaryDist = Infinity;
+      let bestScore = Infinity;
 
       for (const note of notes) {
-        const noteX = note.startTime;
+        // Calculate the center of the note for more accurate distance perception
+        const noteX = note.startTime + note.duration / 2;
         const noteY = (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
 
-        let primaryDist = Infinity;
-        let secondaryDist = Infinity;
+        const dx = noteX - cx;
+        const dy = noteY - cy;
+        
+        let isEligible = false;
 
-        if (direction === 'right' && noteX > cx + 1) {
-          primaryDist = noteX - cx;
-          secondaryDist = Math.abs(noteY - cy);
-        } else if (direction === 'left' && noteX < cx - 1) {
-          primaryDist = cx - noteX;
-          secondaryDist = Math.abs(noteY - cy);
-        } else if (direction === 'up' && noteY < cy - 1) {
-          primaryDist = cy - noteY;
-          secondaryDist = Math.abs(noteX - cx);
-        } else if (direction === 'down' && noteY > cy + 1) {
-          primaryDist = noteY - cy;
-          secondaryDist = Math.abs(noteX - cx);
-        }
+        // Check if note is in the general direction of intent
+        if (direction === 'right' && dx > 0) isEligible = true;
+        if (direction === 'left' && dx < 0) isEligible = true;
+        if (direction === 'down' && dy > 0) isEligible = true;
+        if (direction === 'up' && dy < 0) isEligible = true;
 
-        if (primaryDist < minPrimaryDist) {
-          minPrimaryDist = primaryDist;
-          minSecondaryDist = secondaryDist;
-          bestNote = note;
-        } else if (primaryDist === minPrimaryDist && secondaryDist < minSecondaryDist) {
-          minSecondaryDist = secondaryDist;
-          bestNote = note;
+        if (isEligible) {
+          // Normalize the distances so X (time) and Y (pitch) can be compared fairly.
+          // 1 key height (8px) is roughly equivalent to a 16th note (25px) in terms of user perception
+          const Y_WEIGHT = 25 / 8; 
+          
+          const normDx = Math.abs(dx);
+          const normDy = Math.abs(dy) * Y_WEIGHT;
+
+          // Calculate Euclidean distance in this normalized space
+          const distance = Math.sqrt(normDx * normDx + normDy * normDy);
+
+          // We heavily penalize notes that deviate too much from the PRIMARY axis of intent.
+          // If the user pressed Right, they want to go Right. A note that is slightly right but VERY far up
+          // shouldn't be picked over a note that is further right but on the same pitch line.
+          // We apply a multiplier to the secondary axis to make the cone of vision narrower and more directional.
+          let score = 0;
+          const PENALTY_MULTIPLIER = 3.0; // Make the off-axis distance cost 3x more
+
+          if (direction === 'left' || direction === 'right') {
+             score = distance + (normDy * PENALTY_MULTIPLIER);
+          } else {
+             score = distance + (normDx * PENALTY_MULTIPLIER);
+          }
+
+          if (score < bestScore) {
+            bestScore = score;
+            bestNote = note;
+          }
         }
       }
 
       if (bestNote) {
-        const targetX = bestNote.startTime;
+        const targetX = bestNote.startTime + bestNote.duration / 2;
         const targetY = (127 - bestNote.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
         
         setScrollX(clampX(targetX - VISIBLE_WIDTH / 2));
