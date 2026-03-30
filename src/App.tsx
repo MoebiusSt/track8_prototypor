@@ -17,6 +17,34 @@ const GRID_OPTIONS = [
   { label: '1/32 (12.5px)', value: 12.5 },
 ];
 
+/**
+ * SNAP NAVIGATION ALGORITHMS – FEASIBILITY NOTES FOR REAL IMPLEMENTATION
+ *
+ * This prototype uses pixel distances for scoring. In a real embedded system,
+ * the data model provides only:
+ *   - Horizontal: quantized grid positions (1/1, 1/2, 1/4, ... 1/64 ticks)
+ *   - Vertical: MIDI note numbers (0-127, i.e. semitones)
+ *
+ * These two units are not directly comparable ("3 ticks" vs "5 semitones").
+ * Each algorithm maps to real-world data as follows:
+ *
+ * AXIS PRIORITY:    No conversion needed. Compares only within one axis at a time.
+ *                   Directly implementable on tick/note data.
+ *
+ * REVERSIBLE:       Stores note IDs only. No distance calculation involved.
+ *                   Directly implementable.
+ *
+ * NEAREST VISUAL:   Requires a weighting factor W to compare ticks vs semitones:
+ *                   score = |dx_ticks| * W_time + |dy_semitones| * W_pitch
+ *                   W is a design parameter (could be coupled to the GRID setting).
+ *
+ * DIRECTIONAL BIAS: Same as Nearest but with asymmetric weights per axis.
+ *                   Directly translatable: just different W values per direction.
+ *
+ * PITCH PROXIMITY:  Same structure, with W_time >> W_pitch.
+ *                   Directly translatable.
+ */
+
 type SnapMode = 'nearest' | 'directional' | 'pitch_proximity' | 'axis_priority';
 
 interface MidiNote {
@@ -128,7 +156,7 @@ export const App: React.FC = () => {
   
   const notes = useRef(generateSampleNotes()).current;
   const scrollPos = useRef({ x: 0, y: 0 });
-  const snapHistory = useRef<{ noteId: string; direction: string } | null>(null);
+  const snapHistory = useRef<{ originNoteId: string; direction: string } | null>(null);
 
   useEffect(() => {
     scrollPos.current = { x: scrollX, y: scrollY };
@@ -154,6 +182,18 @@ export const App: React.FC = () => {
         && snapHistory.current !== null
         && direction === opposites[snapHistory.current.direction];
 
+      // Find the note we are currently on (closest to crosshair) to store as origin
+      let currentNoteId: string | null = null;
+      let minCurrentDist = Infinity;
+      for (const n of notes) {
+        const p = getNotePos(n);
+        const d = Math.abs(p.x - cx) + Math.abs(p.y - cy);
+        if (d < minCurrentDist) {
+          minCurrentDist = d;
+          currentNoteId = n.id;
+        }
+      }
+
       let bestNote: MidiNote | null = null;
       let bestScore = Infinity;
 
@@ -170,21 +210,18 @@ export const App: React.FC = () => {
 
         if (snapMode === 'nearest') {
           score = absDx + absDy;
-
         } else if (snapMode === 'directional') {
           if (isHorizontal) {
             score = absDx + absDy * 2;
           } else {
             score = absDy + absDx * 2;
           }
-
         } else if (snapMode === 'pitch_proximity') {
           if (isHorizontal) {
             score = absDx * 4 + absDy;
           } else {
             score = absDy * 4 + absDx;
           }
-
         } else if (snapMode === 'axis_priority') {
           if (isHorizontal) {
             score = absDx * 10000 + absDy;
@@ -193,7 +230,9 @@ export const App: React.FC = () => {
           }
         }
 
-        if (isReversal && note.id === snapHistory.current!.noteId) {
+        // REVERSIBLE: if this is an exact direction reversal and the candidate
+        // is the note we originally came FROM, force it to win.
+        if (isReversal && note.id === snapHistory.current!.originNoteId) {
           score = -1;
         }
 
@@ -204,7 +243,7 @@ export const App: React.FC = () => {
       }
 
       if (bestNote) {
-        snapHistory.current = { noteId: bestNote.id, direction };
+        snapHistory.current = { originNoteId: currentNoteId!, direction };
         const target = getNotePos(bestNote);
         setScrollX(clampX(target.x - VISIBLE_WIDTH / 2));
         setScrollY(clampY(target.y - VISIBLE_HEIGHT / 2));
