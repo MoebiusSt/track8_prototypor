@@ -336,10 +336,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      <div
-        className="controls-bar"
-        onMouseUp={() => (document.activeElement as HTMLElement)?.blur()}
-      >
+      <div className="controls-bar">
         <label>
           Snap Mode:
           <select 
@@ -355,19 +352,19 @@ export const App: React.FC = () => {
         </label>
         <button 
           className={isSnapEnabled ? 'active' : ''} 
-          onClick={() => setIsSnapEnabled(!isSnapEnabled)}
+          onClick={(e) => { setIsSnapEnabled(!isSnapEnabled); (e.currentTarget as HTMLElement).blur(); }}
         >
           SNAP
         </button>
         <button 
           className={isAnimated ? 'active' : ''} 
-          onClick={() => setIsAnimated(!isAnimated)}
+          onClick={(e) => { setIsAnimated(!isAnimated); (e.currentTarget as HTMLElement).blur(); }}
         >
           ANIMATED
         </button>
         <button 
           className={preferReversible ? 'active' : ''} 
-          onClick={() => setPreferReversible(!preferReversible)}
+          onClick={(e) => { setPreferReversible(!preferReversible); (e.currentTarget as HTMLElement).blur(); }}
         >
           WEIGHTED-REVERSE
         </button>
