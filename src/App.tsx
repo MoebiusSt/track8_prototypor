@@ -121,12 +121,14 @@ export const App: React.FC = () => {
   const [scrollY, setScrollY] = useState(0);
   const [isSnapEnabled, setIsSnapEnabled] = useState(false);
   const [isAnimated, setIsAnimated] = useState(true);
+  const [preferReversible, setPreferReversible] = useState(true);
   const [snapMode, setSnapMode] = useState<SnapMode>('nearest');
   const [gridIndex, setGridIndex] = useState(3);
   const gridSize = GRID_OPTIONS[gridIndex].value;
   
   const notes = useRef(generateSampleNotes()).current;
   const scrollPos = useRef({ x: 0, y: 0 });
+  const snapHistory = useRef<{ noteId: string; direction: string } | null>(null);
 
   useEffect(() => {
     scrollPos.current = { x: scrollX, y: scrollY };
@@ -147,6 +149,10 @@ export const App: React.FC = () => {
       const cx = scrollPos.current.x + VISIBLE_WIDTH / 2;
       const cy = scrollPos.current.y + VISIBLE_HEIGHT / 2;
       const isHorizontal = direction === 'left' || direction === 'right';
+      const opposites: Record<string, string> = { up: 'down', down: 'up', left: 'right', right: 'left' };
+      const isReversal = preferReversible
+        && snapHistory.current !== null
+        && direction === opposites[snapHistory.current.direction];
 
       let bestNote: MidiNote | null = null;
       let bestScore = Infinity;
@@ -163,15 +169,9 @@ export const App: React.FC = () => {
         let score = Infinity;
 
         if (snapMode === 'nearest') {
-          // Pure Manhattan distance in raw pixels.
-          // What the user sees is what the algorithm uses.
           score = absDx + absDy;
 
         } else if (snapMode === 'directional') {
-          // Manhattan distance, but the off-axis costs 2x.
-          // This creates a preference for notes aligned with the pressed direction
-          // without being extreme. A note 50px ahead and 0 off-axis (score=50) beats
-          // a note 20px ahead but 20px off-axis (score=20+40=60).
           if (isHorizontal) {
             score = absDx + absDy * 2;
           } else {
@@ -179,9 +179,6 @@ export const App: React.FC = () => {
           }
 
         } else if (snapMode === 'pitch_proximity') {
-          // Horizontal distance costs 4x more than vertical.
-          // Notes close in pitch are musically more related than
-          // notes far away in time on the same pitch line.
           if (isHorizontal) {
             score = absDx * 4 + absDy;
           } else {
@@ -189,14 +186,15 @@ export const App: React.FC = () => {
           }
 
         } else if (snapMode === 'axis_priority') {
-          // Strict primary-axis priority: the note closest on the primary axis wins.
-          // Secondary axis only used as tie-breaker (scaled down to never outweigh primary).
-          // Guaranteed reversible on the primary axis.
           if (isHorizontal) {
             score = absDx * 10000 + absDy;
           } else {
             score = absDy * 10000 + absDx;
           }
+        }
+
+        if (isReversal && note.id === snapHistory.current!.noteId) {
+          score = -1;
         }
 
         if (score < bestScore) {
@@ -206,6 +204,7 @@ export const App: React.FC = () => {
       }
 
       if (bestNote) {
+        snapHistory.current = { noteId: bestNote.id, direction };
         const target = getNotePos(bestNote);
         setScrollX(clampX(target.x - VISIBLE_WIDTH / 2));
         setScrollY(clampY(target.y - VISIBLE_HEIGHT / 2));
@@ -237,7 +236,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSnapEnabled, snapMode, gridSize, notes]);
+  }, [isSnapEnabled, snapMode, preferReversible, gridSize, notes]);
 
   const renderBackground = () => {
     const lanes = [];
@@ -313,6 +312,12 @@ export const App: React.FC = () => {
           onClick={() => setIsAnimated(!isAnimated)}
         >
           ANIMATED
+        </button>
+        <button 
+          className={preferReversible ? 'active' : ''} 
+          onClick={() => setPreferReversible(!preferReversible)}
+        >
+          REVERSIBLE
         </button>
         <label>
           GRID: {GRID_OPTIONS[gridIndex].label}
