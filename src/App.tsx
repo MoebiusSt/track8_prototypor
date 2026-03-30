@@ -327,12 +327,15 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      <div className="controls-bar">
+      <div
+        className="controls-bar"
+        onMouseUp={() => (document.activeElement as HTMLElement)?.blur()}
+      >
         <label>
           Snap Mode:
           <select 
             value={snapMode} 
-            onChange={(e) => setSnapMode(e.target.value as SnapMode)}
+            onChange={(e) => { setSnapMode(e.target.value as SnapMode); (e.target as HTMLElement).blur(); }}
           >
             <option value="nearest">Nearest Visual</option>
             <option value="directional">Directional Bias</option>
@@ -356,7 +359,7 @@ export const App: React.FC = () => {
           className={preferReversible ? 'active' : ''} 
           onClick={() => setPreferReversible(!preferReversible)}
         >
-          REVERSIBLE
+          WEIGHTED-REVERSE
         </button>
         <label>
           GRID: {GRID_OPTIONS[gridIndex].label}
@@ -367,6 +370,7 @@ export const App: React.FC = () => {
             step={1}
             value={gridIndex} 
             onChange={(e) => setGridIndex(Number(e.target.value))}
+            onMouseUp={(e) => (e.target as HTMLElement).blur()}
             style={{ marginLeft: '10px', cursor: 'pointer' }}
           />
         </label>
@@ -413,6 +417,8 @@ export const App: React.FC = () => {
         </div>
       )}
       {isSnapEnabled && (
+        <details className="algo-details">
+          <summary>Pseudocode</summary>
         <pre className="algo-description">{snapMode === 'nearest' ?
 `// ─── NEAREST VISUAL ───────────────────────────────────
 // Input:  crosshair position (cx, cy)
@@ -547,6 +553,7 @@ FUNCTION snap_axis_priority(direction):
 // Only applies to immediate reversal (one step back).
 // Continuing in same or different direction resets history.`}
         </pre>
+        </details>
       )}
     </div>
   );

@@ -16,16 +16,15 @@
 
 body {
   margin: 0;
-  padding: 20px 0;
+  padding: 0;
   background-color: var(--color-bg-dark);
   color: var(--color-text);
   font-family: sans-serif;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  min-height: 100vh;
-  overflow-y: auto;
-  box-sizing: border-box;
+  align-items: center;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-container {
@@ -33,7 +32,6 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  width: 100%;
 }
 
 .controls-bar {
@@ -165,18 +163,45 @@ body {
   border: 1px solid #333;
 }
 
-.algo-description {
+.algo-details {
   max-width: 800px;
+  width: 800px;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  background-color: #0d0d0d;
+}
+
+.algo-details summary {
+  cursor: pointer;
+  padding: 6px 14px;
+  color: #666;
+  font-size: 12px;
+  user-select: none;
+  list-style: none;
+}
+
+.algo-details summary::before {
+  content: '▶  ';
+  font-size: 10px;
+}
+
+.algo-details[open] summary::before {
+  content: '▼  ';
+}
+
+.algo-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.algo-description {
   text-align: left;
   color: #ccc;
   font-size: 12px;
   line-height: 1.6;
-  background-color: #0d0d0d;
-  padding: 16px 20px;
-  border-radius: 4px;
-  border: 1px solid #2a2a2a;
+  padding: 12px 20px 16px;
   font-family: "Consolas", "Courier New", monospace;
   white-space: pre;
   overflow-x: auto;
   margin: 0;
+  border-top: 1px solid #2a2a2a;
 }
