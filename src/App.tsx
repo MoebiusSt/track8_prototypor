@@ -147,10 +147,10 @@ const isInDirection = (dx: number, dy: number, direction: string): boolean => {
 export const App: React.FC = () => {
   const [scrollX, setScrollX] = useState(0);
   const [scrollY, setScrollY] = useState(0);
-  const [isSnapEnabled, setIsSnapEnabled] = useState(false);
+  const [isSnapEnabled, setIsSnapEnabled] = useState(true);
   const [isAnimated, setIsAnimated] = useState(true);
   const [preferReversible, setPreferReversible] = useState(true);
-  const [snapMode, setSnapMode] = useState<SnapMode>('nearest');
+  const [snapMode, setSnapMode] = useState<SnapMode>('directional');
   const [gridIndex, setGridIndex] = useState(3);
   const gridSize = GRID_OPTIONS[gridIndex].value;
   
