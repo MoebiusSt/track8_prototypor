@@ -16,15 +16,16 @@
 
 body {
   margin: 0;
-  padding: 0;
+  padding: 20px 0;
   background-color: var(--color-bg-dark);
   color: var(--color-text);
   font-family: sans-serif;
   display: flex;
   justify-content: center;
-  align-items: center;
-  height: 100vh;
-  overflow: hidden;
+  align-items: flex-start;
+  min-height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .app-container {
@@ -32,6 +33,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  width: 100%;
 }
 
 .controls-bar {
