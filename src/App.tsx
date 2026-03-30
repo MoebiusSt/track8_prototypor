@@ -150,9 +150,13 @@ export const App: React.FC = () => {
   const [isSnapEnabled, setIsSnapEnabled] = useState(true);
   const [isAnimated, setIsAnimated] = useState(true);
   const [preferReversible, setPreferReversible] = useState(true);
+  const [gridCoupledW, setGridCoupledW] = useState(false);
   const [snapMode, setSnapMode] = useState<SnapMode>('directional');
   const [gridIndex, setGridIndex] = useState(3);
   const gridSize = GRID_OPTIONS[gridIndex].value;
+  // Modes that apply off-axis weighting — these benefit from grid-coupled W.
+  const wPitchModes: SnapMode[] = ['nearest', 'directional', 'ellipsoid', 'pitch_proximity'];
+  const showCoupledW = isSnapEnabled && wPitchModes.includes(snapMode);
   
   const notes = useRef(generateSampleNotes()).current;
   const scrollPos = useRef({ x: 0, y: 0 });
@@ -180,6 +184,10 @@ export const App: React.FC = () => {
       const cx = scrollPos.current.x + VISIBLE_WIDTH / 2;
       const cy = scrollPos.current.y + VISIBLE_HEIGHT / 2;
       const isHorizontal = direction === 'left' || direction === 'right';
+      // wPitch: exchange rate between time pixels and pitch pixels.
+      // 1.0 = pixel-equal (prototype default).
+      // gridSize / KEY_HEIGHT = "1 grid step = 1 semitone" in perceptual cost.
+      const wPitch = gridCoupledW ? gridSize / KEY_HEIGHT : 1;
       const opposites: Record<string, string> = { up: 'down', down: 'up', left: 'right', right: 'left' };
       const isReversal = preferReversible
         && snapHistory.current !== null
@@ -212,27 +220,27 @@ export const App: React.FC = () => {
         let score = Infinity;
 
         if (snapMode === 'nearest') {
-          score = absDx + absDy;
+          score = absDx + absDy * wPitch;
         } else if (snapMode === 'directional') {
           if (isHorizontal) {
-            score = absDx + absDy * 2;
+            score = absDx + absDy * wPitch * 2;
           } else {
-            score = absDy + absDx * 2;
+            score = absDy * wPitch + absDx * 2;
           }
         } else if (snapMode === 'ellipsoid') {
           // Compress the off-axis dimension before computing Euclidean distance.
           // Factor 0.25 makes the search space 4x wider in the primary direction,
           // equivalent to an ellipse elongated along the navigation axis.
           if (isHorizontal) {
-            score = Math.sqrt(absDx * absDx + (absDy * 0.25) * (absDy * 0.25));
+            score = Math.sqrt(absDx * absDx + (absDy * wPitch * 0.25) * (absDy * wPitch * 0.25));
           } else {
-            score = Math.sqrt((absDx * 0.25) * (absDx * 0.25) + absDy * absDy);
+            score = Math.sqrt((absDx * 0.25) * (absDx * 0.25) + (absDy * wPitch) * (absDy * wPitch));
           }
         } else if (snapMode === 'pitch_proximity') {
           if (isHorizontal) {
-            score = absDx * 4 + absDy;
+            score = absDx * 4 + absDy * wPitch;
           } else {
-            score = absDy * 4 + absDx;
+            score = absDy * wPitch * 4 + absDx;
           }
         } else if (snapMode === 'axis_priority') {
           if (isHorizontal) {
@@ -295,13 +303,20 @@ export const App: React.FC = () => {
 
       if (bestNote) {
         snapHistory.current = { originNoteId: currentNoteId!, direction };
-        // x_then_y: set anchor after a horizontal snap, keep it after vertical.
-        if (snapMode === 'x_then_y' && isHorizontal) {
-          xThenYAnchorX.current = getNotePos(bestNote).x;
-        }
         const target = getNotePos(bestNote);
-        setScrollX(clampX(target.x - VISIBLE_WIDTH / 2));
-        setScrollY(clampY(target.y - VISIBLE_HEIGHT / 2));
+        if (snapMode === 'x_then_y') {
+          if (isHorizontal) {
+            // Phase 1: move crosshair in time only — pitch (Y) stays unchanged.
+            xThenYAnchorX.current = target.x;
+            setScrollX(clampX(target.x - VISIBLE_WIDTH / 2));
+          } else {
+            // Phase 2: move crosshair in pitch only — time (X) stays at anchor.
+            setScrollY(clampY(target.y - VISIBLE_HEIGHT / 2));
+          }
+        } else {
+          setScrollX(clampX(target.x - VISIBLE_WIDTH / 2));
+          setScrollY(clampY(target.y - VISIBLE_HEIGHT / 2));
+        }
       }
     };
 
@@ -330,7 +345,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSnapEnabled, snapMode, preferReversible, gridSize, notes]);
+  }, [isSnapEnabled, snapMode, preferReversible, gridCoupledW, gridSize, notes]);
 
   const renderBackground = () => {
     const lanes = [];
@@ -415,6 +430,15 @@ export const App: React.FC = () => {
         >
           WEIGHTED-REVERSE
         </button>
+        {showCoupledW && (
+          <button
+            className={gridCoupledW ? 'active' : ''}
+            onClick={(e) => { setGridCoupledW(!gridCoupledW); (e.currentTarget as HTMLElement).blur(); }}
+            title="Weight pitch vs time by current GRID setting (1 grid step = 1 semitone)"
+          >
+            COUPLED W
+          </button>
+        )}
         <label>
           GRID: {GRID_OPTIONS[gridIndex].label}
           <input 
@@ -472,7 +496,7 @@ export const App: React.FC = () => {
             <p><strong>Axis Priority:</strong> Strict primary-axis navigation. Right = chronologically next note start. Up = next higher pitch. Secondary axis only as tie-breaker. Predictable and reversible, but can jump far on the secondary axis.</p>
           )}
           {snapMode === 'x_then_y' && (
-            <p><strong>X then Y:</strong> Two-phase navigation. LEFT/RIGHT moves purely in time — it jumps to the previous or next note start, completely ignoring pitch. UP/DOWN then moves to the note directly above or below <em>at that same time position</em>. This lets you land precisely in a chord: first navigate to the right beat, then step through the chord vertically. If UP/DOWN finds no note at the current time column (e.g. after freely scrolling without SNAP), it falls back to Nearest Visual without Reversible.</p>
+            <p><strong>X then Y:</strong> Strict two-phase navigation. <strong>Step 1 – LEFT/RIGHT:</strong> moves the crosshair only in time to the next or previous note start. Pitch (Y position) does not change — the crosshair slides horizontally to align with a note column, but stays at its current vertical position. <strong>Step 2 – UP/DOWN:</strong> jumps vertically to the note above or below that is in the locked time column. Because a LEFT/RIGHT step guarantees at least one note exists in that column, UP/DOWN will always find a target there. Further UP/DOWN presses walk through all notes of a chord in that column. Failure mode: if no anchor column is set (e.g. after freely scrolling with SNAP off), falls back to Nearest Visual without Reversible.</p>
           )}
         </div>
       )}
