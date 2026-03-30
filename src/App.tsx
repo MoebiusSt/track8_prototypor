@@ -45,7 +45,7 @@ const GRID_OPTIONS = [
  *                   Directly translatable.
  */
 
-type SnapMode = 'nearest' | 'directional' | 'pitch_proximity' | 'axis_priority';
+type SnapMode = 'nearest' | 'directional' | 'ellipsoid' | 'pitch_proximity' | 'axis_priority';
 
 interface MidiNote {
   id: string;
@@ -216,6 +216,15 @@ export const App: React.FC = () => {
           } else {
             score = absDy + absDx * 2;
           }
+        } else if (snapMode === 'ellipsoid') {
+          // Compress the off-axis dimension before computing Euclidean distance.
+          // Factor 0.25 makes the search space 4x wider in the primary direction,
+          // equivalent to an ellipse elongated along the navigation axis.
+          if (isHorizontal) {
+            score = Math.sqrt(absDx * absDx + (absDy * 0.25) * (absDy * 0.25));
+          } else {
+            score = Math.sqrt((absDx * 0.25) * (absDx * 0.25) + absDy * absDy);
+          }
         } else if (snapMode === 'pitch_proximity') {
           if (isHorizontal) {
             score = absDx * 4 + absDy;
@@ -339,6 +348,7 @@ export const App: React.FC = () => {
           >
             <option value="nearest">Nearest Visual</option>
             <option value="directional">Directional Bias</option>
+            <option value="ellipsoid">Ellipsoid (Voice Leading)</option>
             <option value="pitch_proximity">Pitch Proximity</option>
             <option value="axis_priority">Axis Priority</option>
           </select>
@@ -406,7 +416,10 @@ export const App: React.FC = () => {
             <p><strong>Nearest Visual:</strong> Finds the visually closest note in the pressed half-plane using Manhattan distance in raw screen pixels. No normalization, no weighting. What you see is what the algorithm sees.</p>
           )}
           {snapMode === 'directional' && (
-            <p><strong>Directional Bias:</strong> Manhattan distance but deviations from the main scroll axis cost 2x. Pressing Right prefers notes that are more to the right than off to the side. Still picks nearby off-axis notes if they are significantly closer overall.</p>
+            <p><strong>Directional Bias:</strong> Manhattan distance but deviations from the main scroll axis cost 2×. Pressing Right prefers notes that are more to the right than off to the side. Still picks nearby off-axis notes if they are significantly closer overall. Note: the penalty is additive, so a very large off-axis distance can still outweigh a large on-axis distance.</p>
+          )}
+          {snapMode === 'ellipsoid' && (
+            <p><strong>Ellipsoid (Voice Leading):</strong> The search space is shaped like an ellipse elongated in the navigation direction. The off-axis dimension is compressed by 4× <em>before</em> computing Euclidean distance — not added as a penalty afterward. Pressing Right reaches notes that are slightly higher or lower in pitch almost as easily as notes at the same pitch, making it natural to follow a rising or falling melody. This is the structural difference from Directional Bias: a note 80px off-axis costs the same as one only 20px off-axis in Directional mode.</p>
           )}
           {snapMode === 'pitch_proximity' && (
             <p><strong>Pitch Proximity:</strong> Horizontal distance costs 4x more than vertical. Strongly prefers notes that are close in pitch, even if they are slightly in a different time position. Follows musical voice leading: a note 4 semitones away (32px = score 32) is much cheaper to reach than one 50px ahead in time (score 200).</p>
@@ -476,7 +489,47 @@ FUNCTION snap_directional(direction):
 
   // The factor 2.0 is tunable.
   // Higher = stricter axis alignment.
-  // Lower  = more like Nearest Visual.` : snapMode === 'pitch_proximity' ?
+  // Lower  = more like Nearest Visual.` : snapMode === 'ellipsoid' ?
+`// ─── ELLIPSOID (VOICE LEADING) ────────────────────────
+// Instead of adding an off-axis penalty, the search space
+// itself is reshaped into an ellipse elongated along the
+// navigation axis. The off-axis dimension is COMPRESSED
+// before Euclidean distance is computed, not penalized
+// additively afterward. This is the key difference from
+// Directional Bias.
+
+FUNCTION snap_ellipsoid(direction):
+  best = null, best_score = INF
+  COMPRESSION = 0.25   // off-axis scale factor (tunable)
+
+  FOR EACH note IN eligible_notes(direction):
+    dx = |note.startTime - crosshair.x|
+    dy = |note.pitch    - crosshair.y|
+
+    IF direction IN (LEFT, RIGHT):
+      // Compress vertical axis → ellipse is wide horizontally
+      // A note 80px off-pitch costs only sqrt(80*0.25)²=20
+      // instead of 80*2=160 (Directional Bias)
+      score = sqrt( dx² + (dy * COMPRESSION)² )
+
+    ELSE:  // UP or DOWN
+      // Compress horizontal axis → ellipse is tall vertically
+      score = sqrt( (dx * COMPRESSION)² + dy² )
+
+    IF score < best_score:
+      best = note, best_score = score
+
+  RETURN best
+
+  // Why Euclidean instead of Manhattan?
+  // Manhattan: score = a + b  →  isolines are diamonds
+  // Euclidean: score = sqrt(a²+b²)  →  isolines are circles/ellipses
+  // Ellipsoid compresses one axis of that circle into an ellipse,
+  // making the effective search cone wider in the primary direction.
+
+  // Real-system translation:
+  // dx in ticks, dy in semitones → apply separate W factors:
+  // score = sqrt( (dx*W_time)² + (dy*W_pitch*COMPRESSION)² )` : snapMode === 'pitch_proximity' ?
 `// ─── PITCH PROXIMITY ──────────────────────────────────
 // Strongly favors notes close in pitch.
 // Useful for navigating chord voicings and
