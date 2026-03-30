@@ -4,6 +4,10 @@ import './app.css';
 const VISIBLE_WIDTH = 1280;
 const VISIBLE_HEIGHT = 400;
 const KEY_HEIGHT = 8;
+// Fixed pitch weight for COUPLED W mode. Calibrated to feel natural at fine
+// grid resolutions (~1/32). Not derived from the GRID slider — that caused
+// erratic jumps at coarser grid settings.
+const COUPLED_W_PITCH = 3.0;
 const TOTAL_KEYS = 128;
 const TOTAL_WIDTH = 5000;
 const SCROLL_STEP_Y = KEY_HEIGHT;
@@ -186,8 +190,8 @@ export const App: React.FC = () => {
       const isHorizontal = direction === 'left' || direction === 'right';
       // wPitch: exchange rate between time pixels and pitch pixels.
       // 1.0 = pixel-equal (prototype default).
-      // gridSize / KEY_HEIGHT = "1 grid step = 1 semitone" in perceptual cost.
-      const wPitch = gridCoupledW ? gridSize / KEY_HEIGHT : 1;
+      // COUPLED_W_PITCH = fixed ratio calibrated for fine grid resolutions.
+      const wPitch = gridCoupledW ? COUPLED_W_PITCH : 1;
       const opposites: Record<string, string> = { up: 'down', down: 'up', left: 'right', right: 'left' };
       const isReversal = preferReversible
         && snapHistory.current !== null
