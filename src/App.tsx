@@ -17,7 +17,7 @@ const GRID_OPTIONS = [
   { label: '1/32 (12.5px)', value: 12.5 },
 ];
 
-type SnapMode = 'nearest' | 'directional' | 'axis_priority';
+type SnapMode = 'nearest' | 'directional' | 'pitch_proximity' | 'axis_priority';
 
 interface MidiNote {
   id: string;
@@ -178,6 +178,16 @@ export const App: React.FC = () => {
             score = absDy + absDx * 2;
           }
 
+        } else if (snapMode === 'pitch_proximity') {
+          // Horizontal distance costs 4x more than vertical.
+          // Notes close in pitch are musically more related than
+          // notes far away in time on the same pitch line.
+          if (isHorizontal) {
+            score = absDx * 4 + absDy;
+          } else {
+            score = absDy * 4 + absDx;
+          }
+
         } else if (snapMode === 'axis_priority') {
           // Strict primary-axis priority: the note closest on the primary axis wins.
           // Secondary axis only used as tie-breaker (scaled down to never outweigh primary).
@@ -288,6 +298,7 @@ export const App: React.FC = () => {
           >
             <option value="nearest">Nearest Visual</option>
             <option value="directional">Directional Bias</option>
+            <option value="pitch_proximity">Pitch Proximity</option>
             <option value="axis_priority">Axis Priority</option>
           </select>
         </label>
@@ -348,6 +359,9 @@ export const App: React.FC = () => {
           )}
           {snapMode === 'directional' && (
             <p><strong>Directional Bias:</strong> Manhattan distance but deviations from the main scroll axis cost 2x. Pressing Right prefers notes that are more to the right than off to the side. Still picks nearby off-axis notes if they are significantly closer overall.</p>
+          )}
+          {snapMode === 'pitch_proximity' && (
+            <p><strong>Pitch Proximity:</strong> Horizontal distance costs 4x more than vertical. Strongly prefers notes that are close in pitch, even if they are slightly in a different time position. Follows musical voice leading: a note 4 semitones away (32px = score 32) is much cheaper to reach than one 50px ahead in time (score 200).</p>
           )}
           {snapMode === 'axis_priority' && (
             <p><strong>Axis Priority:</strong> Strict primary-axis navigation. Right = chronologically next note start. Up = next higher pitch. Secondary axis only as tie-breaker. Predictable and reversible, but can jump far on the secondary axis.</p>
