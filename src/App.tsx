@@ -412,6 +412,142 @@ export const App: React.FC = () => {
           )}
         </div>
       )}
+      {isSnapEnabled && (
+        <pre className="algo-description">{snapMode === 'nearest' ?
+`// ─── NEAREST VISUAL ───────────────────────────────────
+// Input:  crosshair position (cx, cy)
+//         all MIDI notes with (startTime, noteNumber)
+//         pressed direction (up | down | left | right)
+// Output: the note to snap to
+
+FUNCTION snap_nearest(direction):
+  best = null, best_score = INF
+
+  FOR EACH note IN all_notes:
+    dx = note.startTime - crosshair.x   // ticks or grid steps
+    dy = note.pitch    - crosshair.y    // semitones
+
+    // Only consider notes in the pressed half-plane
+    IF direction == RIGHT AND dx <= 0: SKIP
+    IF direction == LEFT  AND dx >= 0: SKIP
+    IF direction == DOWN  AND dy <= 0: SKIP
+    IF direction == UP    AND dy >= 0: SKIP
+
+    // Score = Manhattan distance.
+    // W_time and W_pitch are equal (both 1).
+    // In a real system, tune these weights to balance
+    // grid-steps vs semitones perceptually.
+    score = |dx| * W_time + |dy| * W_pitch
+
+    IF score < best_score:
+      best = note, best_score = score
+
+  RETURN best` : snapMode === 'directional' ?
+`// ─── DIRECTIONAL BIAS ─────────────────────────────────
+// Same structure as NEAREST, but the off-axis
+// dimension costs 2x more. This narrows the search
+// cone toward the pressed direction.
+
+FUNCTION snap_directional(direction):
+  best = null, best_score = INF
+
+  FOR EACH note IN eligible_notes(direction):
+    dx = |note.startTime - crosshair.x|
+    dy = |note.pitch    - crosshair.y|
+
+    IF direction IN (LEFT, RIGHT):
+      // Horizontal is primary → vertical deviation penalized
+      score = dx * W_time + dy * W_pitch * 2.0
+
+    ELSE:  // UP or DOWN
+      // Vertical is primary → horizontal deviation penalized
+      score = dy * W_pitch + dx * W_time * 2.0
+
+    IF score < best_score:
+      best = note, best_score = score
+
+  RETURN best
+
+  // The factor 2.0 is tunable.
+  // Higher = stricter axis alignment.
+  // Lower  = more like Nearest Visual.` : snapMode === 'pitch_proximity' ?
+`// ─── PITCH PROXIMITY ──────────────────────────────────
+// Strongly favors notes close in pitch.
+// Useful for navigating chord voicings and
+// melodic voice-leading patterns.
+
+FUNCTION snap_pitch_proximity(direction):
+  best = null, best_score = INF
+
+  FOR EACH note IN eligible_notes(direction):
+    dx = |note.startTime - crosshair.x|
+    dy = |note.pitch    - crosshair.y|
+
+    IF direction IN (LEFT, RIGHT):
+      // Time distance is expensive → prefer pitch neighbors
+      score = dx * W_time * 4.0 + dy * W_pitch
+
+    ELSE:  // UP or DOWN
+      // Pitch distance is expensive → prefer time neighbors
+      score = dy * W_pitch * 4.0 + dx * W_time
+
+    IF score < best_score:
+      best = note, best_score = score
+
+  RETURN best
+
+  // Example with W_time=1, W_pitch=1:
+  //   Note A: 50 ticks right, same pitch   → score = 200
+  //   Note B: 10 ticks right, 4 semi up    → score = 44
+  //   → B wins. Voice leading is preserved.` :
+`// ─── AXIS PRIORITY ────────────────────────────────────
+// Strictly navigates by primary axis.
+// No weighting factor W needed.
+// Works directly on tick/note data.
+
+FUNCTION snap_axis_priority(direction):
+  best = null, best_score = INF
+
+  FOR EACH note IN eligible_notes(direction):
+    dx = |note.startTime - crosshair.x|   // ticks
+    dy = |note.pitch    - crosshair.y|    // semitones
+
+    IF direction IN (LEFT, RIGHT):
+      primary   = dx
+      secondary = dy
+    ELSE:
+      primary   = dy
+      secondary = dx
+
+    // Primary axis dominates completely.
+    // Secondary only breaks ties.
+    score = primary * LARGE_NUMBER + secondary
+
+    IF score < best_score:
+      best = note, best_score = score
+
+  RETURN best
+
+  // Behavior:
+  //   RIGHT → next note start in time, closest pitch if tied
+  //   UP    → next higher pitch, closest in time if tied
+  //   Guaranteed reversible on primary axis.`}
+{`
+// ─── REVERSIBLE MODIFIER (applies to all modes above) ─
+//
+// ON EACH SNAP:
+//   store origin_note_id = current note under crosshair
+//   store last_direction = pressed direction
+//
+// ON NEXT SNAP:
+//   IF direction == opposite(last_direction):
+//     force score = -1 for the stored origin_note_id
+//     → guarantees return to exact previous position
+//
+// Only applies to immediate reversal (one step back).
+// Continuing in same or different direction resets history.`}
+        </pre>
+      )}
     </div>
   );
 };
