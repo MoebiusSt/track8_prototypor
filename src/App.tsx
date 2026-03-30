@@ -45,7 +45,7 @@ const GRID_OPTIONS = [
  *                   Directly translatable.
  */
 
-type SnapMode = 'nearest' | 'directional' | 'ellipsoid' | 'pitch_proximity' | 'axis_priority';
+type SnapMode = 'nearest' | 'directional' | 'ellipsoid' | 'pitch_proximity' | 'axis_priority' | 'x_then_y';
 
 interface MidiNote {
   id: string;
@@ -157,6 +157,9 @@ export const App: React.FC = () => {
   const notes = useRef(generateSampleNotes()).current;
   const scrollPos = useRef({ x: 0, y: 0 });
   const snapHistory = useRef<{ originNoteId: string; direction: string } | null>(null);
+  // Tracks the X pixel position of the last horizontal snap in x_then_y mode.
+  // Subsequent UP/DOWN presses look for notes at exactly this X position.
+  const xThenYAnchorX = useRef<number | null>(null);
 
   useEffect(() => {
     scrollPos.current = { x: scrollX, y: scrollY };
@@ -237,6 +240,20 @@ export const App: React.FC = () => {
           } else {
             score = absDy * 10000 + absDx;
           }
+        } else if (snapMode === 'x_then_y') {
+          if (isHorizontal) {
+            // LEFT/RIGHT: pure X navigation, ignore pitch entirely.
+            // Y is only a tiebreaker when two notes share the same start time.
+            score = absDx * 10000 + absDy;
+          } else {
+            // UP/DOWN: only score notes that sit at the anchor X position.
+            // Anchor is set by the preceding LEFT/RIGHT snap.
+            const anchorX = xThenYAnchorX.current;
+            if (anchorX !== null && Math.abs(pos.x - anchorX) < 2) {
+              score = absDy;
+            }
+            // Notes not at anchor X keep score = Infinity → skipped.
+          }
         }
 
         // REVERSIBLE: if this is an exact direction reversal and the candidate
@@ -251,8 +268,37 @@ export const App: React.FC = () => {
         }
       }
 
+      // x_then_y fallback: UP/DOWN found no note at the anchor X position.
+      // This happens when the anchor is unset (user moved freely without
+      // a preceding LEFT/RIGHT snap) or when no note starts at that column.
+      // Fall back to Nearest Visual without the REVERSIBLE modifier.
+      if (snapMode === 'x_then_y' && !isHorizontal && bestNote === null) {
+        let fallbackBest: MidiNote | null = null;
+        let fallbackScore = Infinity;
+        for (const n of notes) {
+          const p = getNotePos(n);
+          const ndx = p.x - cx;
+          const ndy = p.y - cy;
+          if (!isInDirection(ndx, ndy, direction)) continue;
+          const s = Math.abs(ndx) + Math.abs(ndy);
+          if (s < fallbackScore) { fallbackScore = s; fallbackBest = n; }
+        }
+        if (fallbackBest) {
+          xThenYAnchorX.current = null; // position is now arbitrary, clear anchor
+          const target = getNotePos(fallbackBest);
+          setScrollX(clampX(target.x - VISIBLE_WIDTH / 2));
+          setScrollY(clampY(target.y - VISIBLE_HEIGHT / 2));
+          // snapHistory intentionally not updated (no REVERSIBLE on fallback)
+        }
+        return;
+      }
+
       if (bestNote) {
         snapHistory.current = { originNoteId: currentNoteId!, direction };
+        // x_then_y: set anchor after a horizontal snap, keep it after vertical.
+        if (snapMode === 'x_then_y' && isHorizontal) {
+          xThenYAnchorX.current = getNotePos(bestNote).x;
+        }
         const target = getNotePos(bestNote);
         setScrollX(clampX(target.x - VISIBLE_WIDTH / 2));
         setScrollY(clampY(target.y - VISIBLE_HEIGHT / 2));
@@ -348,6 +394,7 @@ export const App: React.FC = () => {
             <option value="ellipsoid">Ellipsoid (Voice Leading)</option>
             <option value="pitch_proximity">Pitch Proximity</option>
             <option value="axis_priority">Axis Priority</option>
+            <option value="x_then_y">X then Y</option>
           </select>
         </label>
         <button 
@@ -423,6 +470,9 @@ export const App: React.FC = () => {
           )}
           {snapMode === 'axis_priority' && (
             <p><strong>Axis Priority:</strong> Strict primary-axis navigation. Right = chronologically next note start. Up = next higher pitch. Secondary axis only as tie-breaker. Predictable and reversible, but can jump far on the secondary axis.</p>
+          )}
+          {snapMode === 'x_then_y' && (
+            <p><strong>X then Y:</strong> Two-phase navigation. LEFT/RIGHT moves purely in time — it jumps to the previous or next note start, completely ignoring pitch. UP/DOWN then moves to the note directly above or below <em>at that same time position</em>. This lets you land precisely in a chord: first navigate to the right beat, then step through the chord vertically. If UP/DOWN finds no note at the current time column (e.g. after freely scrolling without SNAP), it falls back to Nearest Visual without Reversible.</p>
           )}
         </div>
       )}
@@ -555,7 +605,7 @@ FUNCTION snap_pitch_proximity(direction):
   // Example with W_time=1, W_pitch=1:
   //   Note A: 50 ticks right, same pitch   → score = 200
   //   Note B: 10 ticks right, 4 semi up    → score = 44
-  //   → B wins. Voice leading is preserved.` :
+  //   → B wins. Voice leading is preserved.` : snapMode === 'axis_priority' ?
 `// ─── AXIS PRIORITY ────────────────────────────────────
 // Strictly navigates by primary axis.
 // No weighting factor W needed.
@@ -587,7 +637,56 @@ FUNCTION snap_axis_priority(direction):
   // Behavior:
   //   RIGHT → next note start in time, closest pitch if tied
   //   UP    → next higher pitch, closest in time if tied
-  //   Guaranteed reversible on primary axis.`}
+  //   Guaranteed reversible on primary axis.` : snapMode === 'x_then_y' ?
+`// ─── X THEN Y ─────────────────────────────────────────
+// Two-phase navigation: LEFT/RIGHT locks to a time column,
+// UP/DOWN then steps through notes in that column.
+// REVERSIBLE modifier applies to the normal path only.
+// The fallback path (no notes in column) uses Nearest Visual.
+
+FUNCTION snap_x_then_y(direction):
+
+  IF direction IN (LEFT, RIGHT):
+    // ── Phase 1: move in time, ignore pitch ──────────────
+    best = null, best_score = INF
+
+    FOR EACH note IN all_notes:
+      dx = |note.startTime - crosshair.x|
+      dy = |note.pitch    - crosshair.y|
+
+      IF note not in pressed X direction: SKIP
+
+      // Pure time distance. Y is only a tiebreaker when
+      // two notes share the exact same start time.
+      score = dx * LARGE_NUMBER + dy
+
+      IF score < best_score:
+        best = note, best_score = score
+
+    IF best found:
+      anchor_x = best.startTime   // remember column for next UP/DOWN
+      SNAP TO best
+      RETURN
+
+  ELSE:  // UP or DOWN
+    // ── Phase 2: move in pitch within the locked column ──
+    IF anchor_x is SET:
+      FOR EACH note IN all_notes:
+        IF |note.startTime - anchor_x| >= EPSILON: SKIP  // wrong column
+        dy = note.pitch - crosshair.y
+        IF note not in pressed Y direction: SKIP
+        score = |dy|
+
+      IF any candidate found:
+        SNAP TO lowest-score candidate
+        // anchor_x stays set → further UP/DOWN keeps walking the chord
+        RETURN
+
+    // ── Fallback: no anchor or column is empty ───────────
+    // User moved freely (SNAP was off) or no note in column.
+    // Use Nearest Visual without REVERSIBLE.
+    anchor_x = null
+    SNAP TO nearest note in direction (Manhattan, no REVERSIBLE)` : `// ─── (select a mode above) ───`}
 {`
 // ─── REVERSIBLE MODIFIER (applies to all modes above) ─
 //
