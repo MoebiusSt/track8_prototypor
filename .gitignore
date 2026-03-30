@@ -13,14 +13,12 @@ dist-ssr
 *.local
 
 # Reference files (kept locally, not in public repo)
-Manual1.1.0.pdf
+/docs/Manual1.1.0.pdf
+docs/Track8_feature_design_principles.md
 screenshot_*.png
 example_*.jpg
 Track8_feauture_design_principles.md
 SCAFFOLD_SUMMARY.md
-
-# Root-level font duplicate (the tracked copy lives in src/assets/fonts/)
-/monogram_Medium.ttf
 
 # Editor directories and files
 .vscode/*
