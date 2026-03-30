@@ -6,8 +6,8 @@ const VISIBLE_HEIGHT = 400;
 const KEY_HEIGHT = 8;
 // Fixed pitch weight for COUPLED W mode. Calibrated to feel natural at fine
 // grid resolutions (~1/32). Not derived from the GRID slider — that caused
-// erratic jumps at coarser grid settings.
-const COUPLED_W_PITCH = 3.0;
+// erratic jumps at coarser grid settings. This roughly corresponds to the feel of 1/32 (mathematically, 1/32 = 12.5px / 8px = 1.56, but 3.0 gives the pitch spacing slightly more weight, which makes it easier to navigate in practice)
+const COUPLED_W_PITCH = 2.0;
 const TOTAL_KEYS = 128;
 const TOTAL_WIDTH = 5000;
 const SCROLL_STEP_Y = KEY_HEIGHT;
