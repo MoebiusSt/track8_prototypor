@@ -49,7 +49,7 @@ const GRID_OPTIONS = [
  *                   Directly translatable.
  */
 
-type SnapMode = 'nearest' | 'directional' | 'ellipsoid' | 'pitch_proximity' | 'axis_priority' | 'x_then_y';
+type SnapMode = 'nearest' | 'directional' | 'ellipsoid' | 'pitch_proximity' | 'axis_priority' | 'x_then_y' | 'time_harmony';
 
 interface MidiNote {
   id: string;
@@ -57,6 +57,7 @@ interface MidiNote {
   startTime: number;
   duration: number;
   velocity: number;
+  density: number; // 0.0 = last to disappear (melodic), 1.0 = first to disappear (harmonic)
 }
 
 const isBlackKey = (noteNumber: number) => {
@@ -65,21 +66,61 @@ const isBlackKey = (noteNumber: number) => {
 };
 
 const generateSampleNotes = (): MidiNote[] => {
-  const notes: MidiNote[] = [];
-  let noteId = 0;
-  
-  const addNote = (note: number, time: number, dur: number) => {
-    notes.push({
-      id: `note-${noteId++}`,
-      noteNumber: note,
-      startTime: time,
-      duration: dur,
-      velocity: 80 + Math.random() * 40
-    });
-  };
-
   const beat = 100;
 
+  // Density is assigned by explicit layer — no post-processing needed.
+  // Each layer's range is randomized so notes within a layer fade out one
+  // by one as the slider moves (no step-wise group disappearance).
+  // Layer 0 (0.00–0.12): arpeggio skeleton — last notes to disappear
+  // Layer 1 (0.12–0.38): single bass notes
+  // Layer 2 (0.38–0.60): dyads
+  // Layer 3 (0.60–0.80): triads
+  // Layer 4 (0.80–1.00): full chords + ornaments — first to disappear
+  const layerRanges: [number, number][] = [
+    [0.00, 0.12],
+    [0.12, 0.38],
+    [0.38, 0.60],
+    [0.60, 0.80],
+    [0.80, 1.00],
+  ];
+
+  type RawNote = { nn: number; t: number; d: number; layer: number };
+  const raw: RawNote[] = [];
+  const add = (nn: number, t: number, d: number, layer: number) =>
+    raw.push({ nn, t, d, layer });
+
+  // ── LAYER 0: Arpeggio skeleton ────────────────────────────────────────────
+  // Strictly sequential (no simultaneous notes), melodic up/down movement
+  // with pauses and register jumps — visible at all slider positions.
+  // [noteNumber, startBeat, durationBeats]
+  const arp: [number, number, number][] = [
+    [48,  0.0, 1.4],  // C3  — low anchor
+    [52,  2.0, 2.4],  // E3
+    [55,  5.0, 0.5],  // G3  — quick
+    [60,  6.0, 3.2],  // C4  — held
+    [57, 10.0, 1.4],  // A3
+    [64, 12.0, 2.7],  // E4  — high
+    [53, 16.0, 1.4],  // F3  — drop
+    [59, 18.0, 0.5],  // B3  — quick
+    [62, 20.0, 2.0],  // D4
+    [55, 23.0, 0.4],  // G3  — quick
+    [67, 24.0, 0.9],  // G4  — peak
+    [64, 26.0, 1.4],  // E4
+    [60, 28.0, 2.4],  // C4
+    [57, 32.0, 0.7],  // A3
+    [55, 34.0, 3.0],  // G3  — held
+    [52, 38.0, 0.5],  // E3  — quick
+    [48, 40.0, 0.9],  // C3  — low anchor
+    [55, 42.0, 0.3],  // G3  — quick
+    [59, 43.0, 1.4],  // B3
+    [62, 46.0, 2.0],  // D4
+    [65, 49.0, 0.5],  // F4  — quick
+  ];
+  for (const [nn, start, dur] of arp) {
+    add(nn, start * beat, dur * beat, 0);
+  }
+
+  // ── LAYERS 1–4: Harmonic complexity on C–G–Am–F progression ─────────────
   const progressions = [
     { root: 48, quality: 'major' },
     { root: 55, quality: 'major' },
@@ -88,54 +129,109 @@ const generateSampleNotes = (): MidiNote[] => {
     { root: 48, quality: 'major' },
     { root: 55, quality: 'major' },
     { root: 53, quality: 'major' },
-    { root: 53, quality: 'major' },
+    { root: 50, quality: 'minor' },
   ];
+  const getChord = (root: number, q: string) =>
+    q === 'major' ? [root, root + 4, root + 7, root + 12] : [root, root + 3, root + 7, root + 12];
 
-  const getChordNotes = (root: number, quality: string) => {
-    if (quality === 'major') return [root, root + 4, root + 7, root + 12];
-    return [root, root + 3, root + 7, root + 12];
-  };
+  for (let bar = 0; bar < 12; bar++) {
+    const { root, quality } = progressions[bar % 8];
+    const [c0, c1, c2, c3] = getChord(root, quality);
+    const bs = bar * beat * 4;
 
-  for (let bar = 0; bar < 16; bar++) {
-    const prog = progressions[bar % 8];
-    const chord = getChordNotes(prog.root, prog.quality);
-    const barStart = bar * beat * 4;
+    // Layer 1 – bass root, split across bar halves (no overlap between them)
+    add(c0 - 12, bs,              beat * 1.85, 1);
+    add(c0 - 12, bs + beat * 2.0, beat * 1.85, 1);
 
-    addNote(chord[0] - 12, barStart, beat * 4 + beat * 0.5);
-    
-    addNote(chord[0], barStart + beat * 0.5, beat * 1.5);
-    addNote(chord[1], barStart + beat * 1.0, beat * 3.5);
-    addNote(chord[2], barStart + beat * 1.5, beat * 2.8);
-    
-    const rollOffset = 5;
-    addNote(chord[1] + 12, barStart + beat * 2.0 + rollOffset * 0, beat * 1.5);
-    addNote(chord[2] + 12, barStart + beat * 2.0 + rollOffset * 1, beat * 1.5);
-    addNote(chord[3] + 12, barStart + beat * 2.0 + rollOffset * 2, beat * 1.5 + beat * 0.2);
+    // Layer 2 – dyads at staggered positions (each pair of notes simultaneous)
+    add(c0, bs + beat * 0.5, beat * 1.2, 2);
+    add(c1, bs + beat * 0.5, beat * 1.2, 2);
+    add(c0, bs + beat * 2.3, beat * 0.9, 2);
+    add(c2, bs + beat * 2.3, beat * 0.9, 2);
+    add(c1, bs + beat * 3.3, beat * 0.6, 2);
+    add(c2, bs + beat * 3.3, beat * 0.6, 2);
 
-    const mBase = chord[3] + 12;
-    if (bar % 2 === 0) {
-      addNote(mBase, barStart + beat * 0.0, beat * 0.8);
-      addNote(mBase + 2, barStart + beat * 1.0, beat * 0.4);
-      addNote(mBase + 4, barStart + beat * 1.5, beat * 0.4);
-      addNote(mBase + 7, barStart + beat * 2.5, beat * 1.2);
-    } else {
-      addNote(mBase + 7, barStart + beat * 0.0, beat * 0.3);
-      addNote(mBase + 5, barStart + beat * 0.5, beat * 0.3);
-      addNote(mBase + 4, barStart + beat * 1.0, beat * 0.8);
-      addNote(mBase + 2, barStart + beat * 2.0, beat * 0.2);
-      addNote(mBase + 4, barStart + beat * 2.2, beat * 0.2);
-      addNote(mBase + 5, barStart + beat * 2.4, beat * 0.2);
-      addNote(mBase + 7, barStart + beat * 2.6, beat * 1.4);
-    }
+    // Layer 3 – triads (3 notes simultaneous)
+    add(c0, bs,              beat * 0.65, 3);
+    add(c1, bs,              beat * 0.65, 3);
+    add(c2, bs,              beat * 0.65, 3);
+    add(c1, bs + beat * 2.0, beat * 0.65, 3);
+    add(c2, bs + beat * 2.0, beat * 0.65, 3);
+    add(c3, bs + beat * 2.0, beat * 0.65, 3);
+
+    // Layer 4 – full 4-note voicings + short ornaments (max 0.6 beat long)
+    add(c0, bs + beat * 1.0, beat * 0.5, 4);
+    add(c1, bs + beat * 1.0, beat * 0.5, 4);
+    add(c2, bs + beat * 1.0, beat * 0.5, 4);
+    add(c3, bs + beat * 1.0, beat * 0.5, 4);
+    add(c0, bs + beat * 3.0, beat * 0.5, 4);
+    add(c1, bs + beat * 3.0, beat * 0.5, 4);
+    add(c2, bs + beat * 3.0, beat * 0.5, 4);
+    add(c3, bs + beat * 3.0, beat * 0.5, 4);
+    // ornamental strikes
+    add(c2 + 12, bs + beat * 0.6,  beat * 0.22, 4);
+    add(c3 + 12, bs + beat * 1.55, beat * 0.22, 4);
+    add(c1 + 12, bs + beat * 2.2,  beat * 0.22, 4);
+    add(c0 + 12, bs + beat * 3.5,  beat * 0.22, 4);
   }
 
-  return notes;
+  // ── Assign density randomly within each layer's range ────────────────────
+  // Random spread prevents step-wise group disappearance when sliding.
+  type RawWithDensity = RawNote & { density: number };
+  const rawD: RawWithDensity[] = raw.map(n => {
+    const [lo, hi] = layerRanges[n.layer];
+    return { ...n, density: lo + Math.random() * (hi - lo) };
+  });
+
+  // ── Resolve pitch overlaps ────────────────────────────────────────────────
+  // Track8 is monophonic per pitch lane: no two notes may overlap in time at
+  // the same noteNumber. Process in ascending density order so that lower-
+  // density (more important) notes keep their original pitch; higher-density
+  // notes shift up/down by semitones until they find a free slot.
+  const byDensity = [...rawD].sort((a, b) => a.density - b.density);
+  const occupied = new Map<number, Array<{ start: number; end: number }>>();
+  const resolvedPitch = new Map<RawWithDensity, number>();
+
+  for (const n of byDensity) {
+    const noteEnd = n.t + n.d;
+    let chosen = -1;
+    for (let delta = 0; delta < 64 && chosen === -1; delta++) {
+      for (const pitch of (delta === 0 ? [n.nn] : [n.nn + delta, n.nn - delta])) {
+        if (pitch < 0 || pitch > 127) continue;
+        const slots = occupied.get(pitch) ?? [];
+        if (!slots.some(s => n.t < s.end && noteEnd > s.start)) {
+          chosen = pitch;
+          slots.push({ start: n.t, end: noteEnd });
+          occupied.set(pitch, slots);
+          break;
+        }
+      }
+    }
+    resolvedPitch.set(n, chosen >= 0 ? chosen : n.nn);
+  }
+
+  return rawD.map((n, i) => ({
+    id: `note-${i}`,
+    noteNumber: resolvedPitch.get(n)!,
+    startTime: n.t,
+    duration: n.d,
+    velocity: 80 + Math.random() * 40,
+    density: n.density,
+  }));
 };
 
 const getNotePos = (note: MidiNote) => ({
   x: note.startTime,
   y: (127 - note.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2
 });
+
+const getCursorWorldPos = (scrollX: number, scrollY: number) => {
+  const cursorX = scrollX + VISIBLE_WIDTH / 2;
+  const cursorY = scrollY + VISIBLE_HEIGHT / 2;
+  const rawPitch = 127 - Math.floor(cursorY / KEY_HEIGHT);
+  const cursorPitch = Math.max(0, Math.min(TOTAL_KEYS - 1, rawPitch));
+  return { cursorX, cursorY, cursorPitch };
+};
 
 const isInDirection = (dx: number, dy: number, direction: string): boolean => {
   const THRESHOLD = 0.5;
@@ -155,9 +251,11 @@ export const App: React.FC = () => {
   const [isAnimated, setIsAnimated] = useState(true);
   const [preferReversible, setPreferReversible] = useState(true);
   const [gridCoupledW, setGridCoupledW] = useState(false);
-  const [snapMode, setSnapMode] = useState<SnapMode>('directional');
+  const [snapMode, setSnapMode] = useState<SnapMode>('time_harmony');
   const [gridIndex, setGridIndex] = useState(3);
   const gridSize = GRID_OPTIONS[gridIndex].value;
+  const [densityThreshold, setDensityThreshold] = useState(1.0);
+  const [maxPitchDistance, setMaxPitchDistance] = useState(2);
   // Modes that apply off-axis weighting — these benefit from grid-coupled W.
   const wPitchModes: SnapMode[] = ['nearest', 'directional', 'ellipsoid', 'pitch_proximity'];
   const showCoupledW = isSnapEnabled && wPitchModes.includes(snapMode);
@@ -197,10 +295,89 @@ export const App: React.FC = () => {
         && snapHistory.current !== null
         && direction === opposites[snapHistory.current.direction];
 
+      const activeNotes = notes.filter(n => n.density <= densityThreshold);
+
+      // ── TIME / HARMONY: fully independent algorithm, early return ─────────
+      if (snapMode === 'time_harmony') {
+        const cursorPitch = 127 - Math.floor(cy / KEY_HEIGHT);
+
+        if (isHorizontal) {
+          // LEFT/RIGHT: tick-group search with pitch gate.
+          // Walk through start ticks in chronological order (nearest first).
+          // Accept the first tick that contains a note within MAX_PITCH_DISTANCE
+          // semitones. Falls back to the very nearest tick if none qualifies.
+          const MAX_PITCH_DISTANCE = maxPitchDistance;
+
+          const candidates = activeNotes.filter(n =>
+            direction === 'right' ? n.startTime > cx : n.startTime < cx
+          );
+          if (candidates.length === 0) return;
+
+          const tickSet = new Set(candidates.map(n => n.startTime));
+          const ticks = [...tickSet].sort((a, b) =>
+            direction === 'right' ? a - b : b - a
+          );
+
+          const pickNearest = (notesAtTick: MidiNote[]) =>
+            notesAtTick.reduce((best, n) => {
+              const nd = Math.abs(n.noteNumber - cursorPitch);
+              const bd = Math.abs(best.noteNumber - cursorPitch);
+              if (nd < bd) return n;
+              if (nd === bd && n.noteNumber < best.noteNumber) return n;
+              return best;
+            });
+
+          let picked: MidiNote | null = null;
+          for (const tick of ticks) {
+            const group = candidates.filter(n => n.startTime === tick);
+            const nearest = pickNearest(group);
+            if (Math.abs(nearest.noteNumber - cursorPitch) <= MAX_PITCH_DISTANCE) {
+              picked = nearest;
+              break;
+            }
+          }
+
+          if (!picked) {
+            const fallbackGroup = candidates.filter(n => n.startTime === ticks[0]);
+            picked = pickNearest(fallbackGroup);
+          }
+
+          const targetY = (127 - picked.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
+          setScrollX(clampX(picked.startTime - VISIBLE_WIDTH / 2));
+          setScrollY(clampY(targetY - VISIBLE_HEIGHT / 2));
+        } else {
+          // UP/DOWN: step vertically through notes sounding at the current X.
+          // A note "sounds at" cursor.x when startTime <= cursor.x < startTime + duration.
+          // X axis is never changed.
+          const soundingNotes = activeNotes.filter(n =>
+            n.startTime <= cx && cx < n.startTime + n.duration
+          );
+
+          let picked: MidiNote | null = null;
+          if (direction === 'up') {
+            const above = soundingNotes.filter(n => n.noteNumber > cursorPitch);
+            if (above.length === 0) return;
+            picked = above.reduce((best, n) => n.noteNumber < best.noteNumber ? n : best);
+          } else {
+            const below = soundingNotes.filter(n => n.noteNumber < cursorPitch);
+            if (below.length === 0) return;
+            picked = below.reduce((best, n) => n.noteNumber > best.noteNumber ? n : best);
+          }
+
+          if (picked) {
+            const targetY = (127 - picked.noteNumber) * KEY_HEIGHT + KEY_HEIGHT / 2;
+            setScrollY(clampY(targetY - VISIBLE_HEIGHT / 2));
+            // scrollX intentionally unchanged
+          }
+        }
+        return;
+      }
+      // ──────────────────────────────────────────────────────────────────────
+
       // Find the note we are currently on (closest to crosshair) to store as origin
       let currentNoteId: string | null = null;
       let minCurrentDist = Infinity;
-      for (const n of notes) {
+      for (const n of activeNotes) {
         const p = getNotePos(n);
         const d = Math.abs(p.x - cx) + Math.abs(p.y - cy);
         if (d < minCurrentDist) {
@@ -212,7 +389,7 @@ export const App: React.FC = () => {
       let bestNote: MidiNote | null = null;
       let bestScore = Infinity;
 
-      for (const note of notes) {
+      for (const note of activeNotes) {
         const pos = getNotePos(note);
         const dx = pos.x - cx;
         const dy = pos.y - cy;
@@ -287,7 +464,7 @@ export const App: React.FC = () => {
       if (snapMode === 'x_then_y' && !isHorizontal && bestNote === null) {
         let fallbackBest: MidiNote | null = null;
         let fallbackScore = Infinity;
-        for (const n of notes) {
+        for (const n of activeNotes) {
           const p = getNotePos(n);
           const ndx = p.x - cx;
           const ndy = p.y - cy;
@@ -349,7 +526,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSnapEnabled, snapMode, preferReversible, gridCoupledW, gridSize, notes]);
+  }, [isSnapEnabled, snapMode, preferReversible, gridCoupledW, gridSize, notes, densityThreshold, maxPitchDistance]);
 
   const renderBackground = () => {
     const lanes = [];
@@ -373,9 +550,12 @@ export const App: React.FC = () => {
   };
 
   const renderNotes = () => {
-    return notes.map((note) => {
+    const { cursorX, cursorPitch } = getCursorWorldPos(scrollX, scrollY);
+    const activeNotes = notes.filter(n => n.density <= densityThreshold);
+
+    return activeNotes.map((note) => {
       const yPos = (127 - note.noteNumber) * KEY_HEIGHT;
-      
+
       if (
         note.startTime + note.duration < scrollX ||
         note.startTime > scrollX + VISIBLE_WIDTH ||
@@ -385,10 +565,15 @@ export const App: React.FC = () => {
         return null;
       }
 
+      const isHighlighted =
+        note.startTime <= cursorX &&
+        cursorX < note.startTime + note.duration &&
+        note.noteNumber === cursorPitch;
+
       return (
         <div
           key={note.id}
-          className="midi-note"
+          className={`midi-note${isHighlighted ? ' midi-note--highlighted' : ''}`}
           style={{
             left: `${note.startTime}px`,
             top: `${yPos}px`,
@@ -414,8 +599,24 @@ export const App: React.FC = () => {
             <option value="pitch_proximity">Pitch Proximity</option>
             <option value="axis_priority">Axis Priority</option>
             <option value="x_then_y">X then Y</option>
+            <option value="time_harmony">Time / Harmony</option>
           </select>
         </label>
+        {snapMode === 'time_harmony' && (
+          <label>
+            PITCH GATE: {maxPitchDistance} st
+            <input
+              type="range"
+              min={0}
+              max={12}
+              step={1}
+              value={maxPitchDistance}
+              onChange={(e) => setMaxPitchDistance(Number(e.target.value))}
+              onMouseUp={(e) => (e.target as HTMLElement).blur()}
+              style={{ marginLeft: '10px', cursor: 'pointer' }}
+            />
+          </label>
+        )}
         <button 
           className={isSnapEnabled ? 'active' : ''} 
           onClick={(e) => { setIsSnapEnabled(!isSnapEnabled); (e.currentTarget as HTMLElement).blur(); }}
@@ -428,12 +629,14 @@ export const App: React.FC = () => {
         >
           ANIMATED
         </button>
-        <button 
-          className={preferReversible ? 'active' : ''} 
-          onClick={(e) => { setPreferReversible(!preferReversible); (e.currentTarget as HTMLElement).blur(); }}
-        >
-          WEIGHTED-REVERSE
-        </button>
+        {snapMode !== 'time_harmony' && (
+          <button 
+            className={preferReversible ? 'active' : ''} 
+            onClick={(e) => { setPreferReversible(!preferReversible); (e.currentTarget as HTMLElement).blur(); }}
+          >
+            WEIGHTED-REVERSE
+          </button>
+        )}
         {showCoupledW && (
           <button
             className={gridCoupledW ? 'active' : ''}
@@ -452,6 +655,19 @@ export const App: React.FC = () => {
             step={1}
             value={gridIndex} 
             onChange={(e) => setGridIndex(Number(e.target.value))}
+            onMouseUp={(e) => (e.target as HTMLElement).blur()}
+            style={{ marginLeft: '10px', cursor: 'pointer' }}
+          />
+        </label>
+        <label>
+          DENSITY: {Math.round(densityThreshold * 100)}%
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={densityThreshold}
+            onChange={(e) => setDensityThreshold(Number(e.target.value))}
             onMouseUp={(e) => (e.target as HTMLElement).blur()}
             style={{ marginLeft: '10px', cursor: 'pointer' }}
           />
@@ -501,6 +717,9 @@ export const App: React.FC = () => {
           )}
           {snapMode === 'x_then_y' && (
             <p><strong>X then Y:</strong> Strict two-phase navigation. <strong>Step 1 – LEFT/RIGHT:</strong> moves the crosshair only in time to the next or previous note start. Pitch (Y position) does not change — the crosshair slides horizontally to align with a note column, but stays at its current vertical position. <strong>Step 2 – UP/DOWN:</strong> jumps vertically to the note above or below that is in the locked time column. Because a LEFT/RIGHT step guarantees at least one note exists in that column, UP/DOWN will always find a target there. Further UP/DOWN presses walk through all notes of a chord in that column. Failure mode: if no anchor column is set (e.g. after freely scrolling with SNAP off), falls back to Nearest Visual without Reversible.</p>
+          )}
+          {snapMode === 'time_harmony' && (
+            <p><strong>Time / Harmony:</strong> Axes are strictly separated. <strong>LEFT/RIGHT:</strong> walks through note start ticks in chronological order (nearest first) and accepts the first tick that has a note within 12 semitones (1 octave) of the current pitch. Ticks with only far-away notes are skipped. Fallback: if no tick qualifies, jumps to the nearest tick anyway. <strong>UP/DOWN:</strong> considers only notes whose duration covers the current X position ("sounding now"), then steps to the nearest pitch above or below. X never changes. Notes are treated as rectangles — a long sustained bass note is reachable via DOWN even if its start is far to the left.</p>
           )}
         </div>
       )}
@@ -665,7 +884,64 @@ FUNCTION snap_axis_priority(direction):
   // Behavior:
   //   RIGHT → next note start in time, closest pitch if tied
   //   UP    → next higher pitch, closest in time if tied
-  //   Guaranteed reversible on primary axis.` : snapMode === 'x_then_y' ?
+  //   Guaranteed reversible on primary axis.`   : snapMode === 'time_harmony' ?
+`// ─── TIME / HARMONY ───────────────────────────────────
+// Notes are rectangles, not points.
+// LEFT/RIGHT: tick-group search with pitch gate.
+// UP/DOWN:    pitch axis only → step through notes sounding NOW.
+// X and Y axes are strictly separated for UP/DOWN.
+// LEFT/RIGHT may adjust Y but only within the pitch gate.
+
+FUNCTION snap_time_harmony(direction):
+
+  cursor_x     = crosshair.x
+  cursor_pitch = 127 - floor(cursor_y / KEY_HEIGHT)
+  MAX_PITCH_DISTANCE = 12  // semitones (1 octave)
+
+  IF direction IN (LEFT, RIGHT):
+    // ── Collect candidate ticks in given direction ────────
+    IF direction == RIGHT:
+      candidates = notes WHERE startTick > cursor_x
+      ticks = UNIQUE(candidates.startTick) SORTED ASCENDING
+    ELSE:
+      candidates = notes WHERE startTick < cursor_x
+      ticks = UNIQUE(candidates.startTick) SORTED DESCENDING
+
+    IF candidates is EMPTY: DO NOTHING, RETURN
+
+    // ── Walk ticks, accept first with pitch-near note ─────
+    FOR EACH tick IN ticks:
+      group = candidates WHERE startTick == tick
+      nearest = group note WITH smallest |noteNumber - cursor_pitch|
+      // tie: prefer lower noteNumber (deterministic)
+
+      IF |nearest.noteNumber - cursor_pitch| <= MAX_PITCH_DISTANCE:
+        SNAP cursor TO (nearest.startTick, nearest.noteNumber)
+        RETURN
+
+    // ── Fallback: all ticks exceed pitch gate ─────────────
+    group = candidates WHERE startTick == ticks[0]
+    nearest = group note WITH smallest |noteNumber - cursor_pitch|
+    SNAP cursor TO (nearest.startTick, nearest.noteNumber)
+
+  ELSE:  // UP or DOWN
+    // ── Notes "sounding at" current time ─────────────────
+    // Considers full note rectangles, not just start points.
+    // A bass note that started 8 bars ago is included if its
+    // duration still reaches the current cursor_x.
+    sounding = notes WHERE startTick <= cursor_x < startTick + duration
+
+    IF direction == UP:
+      above = sounding WHERE noteNumber > cursor_pitch
+      IF above is EMPTY: DO NOTHING, RETURN
+      picked = above note WITH MIN(noteNumber)  // nearest above
+    ELSE:
+      below = sounding WHERE noteNumber < cursor_pitch
+      IF below is EMPTY: DO NOTHING, RETURN
+      picked = below note WITH MAX(noteNumber)  // nearest below
+
+    SNAP cursor.y TO picked.noteNumber
+    // cursor.x is NEVER changed by UP/DOWN` : snapMode === 'x_then_y' ?
 `// ─── X THEN Y ─────────────────────────────────────────
 // Two-phase navigation: LEFT/RIGHT locks to a time column,
 // UP/DOWN then steps through notes in that column.
