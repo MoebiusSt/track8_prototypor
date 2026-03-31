@@ -49,7 +49,7 @@ const GRID_OPTIONS = [
  *                   Directly translatable.
  */
 
-type SnapMode = 'nearest' | 'directional' | 'ellipsoid' | 'pitch_proximity' | 'axis_priority' | 'x_then_y' | 'time_harmony';
+type SnapMode = 'nearest' | 'directional' | 'ellipsoid' | 'pitch_proximity' | 'axis_priority' | 'x_then_y' | 'time_harmony' | 'time_harmony_fallback';
 
 interface MidiNote {
   id: string;
@@ -297,8 +297,8 @@ export const App: React.FC = () => {
 
       const activeNotes = notes.filter(n => n.density <= densityThreshold);
 
-      // ── TIME / HARMONY: fully independent algorithm, early return ─────────
-      if (snapMode === 'time_harmony') {
+      // ── TIME / HARMONY (+ optional Fallback): early return ───────────────
+      if (snapMode === 'time_harmony' || snapMode === 'time_harmony_fallback') {
         const cursorPitch = 127 - Math.floor(cy / KEY_HEIGHT);
 
         if (isHorizontal) {
@@ -353,15 +353,30 @@ export const App: React.FC = () => {
             n.startTime <= cx && cx < n.startTime + n.duration
           );
 
-          let picked: MidiNote | null = null;
-          if (direction === 'up') {
-            const above = soundingNotes.filter(n => n.noteNumber > cursorPitch);
-            if (above.length === 0) return;
-            picked = above.reduce((best, n) => n.noteNumber < best.noteNumber ? n : best);
-          } else {
-            const below = soundingNotes.filter(n => n.noteNumber < cursorPitch);
-            if (below.length === 0) return;
-            picked = below.reduce((best, n) => n.noteNumber > best.noteNumber ? n : best);
+          const pickVertical = (pool: MidiNote[], dir: 'up' | 'down'): MidiNote | null => {
+            if (dir === 'up') {
+              const above = pool.filter(n => n.noteNumber > cursorPitch);
+              if (above.length === 0) return null;
+              return above.reduce((best, n) => n.noteNumber < best.noteNumber ? n : best);
+            } else {
+              const below = pool.filter(n => n.noteNumber < cursorPitch);
+              if (below.length === 0) return null;
+              return below.reduce((best, n) => n.noteNumber > best.noteNumber ? n : best);
+            }
+          };
+
+          let picked = pickVertical(soundingNotes, direction as 'up' | 'down');
+
+          if (!picked && snapMode === 'time_harmony_fallback') {
+            // Fallback (w. Fallback mode only): search notes starting near cursor.x
+            // within TIME_FALLBACK_RADIUS to reach short notes that LEFT/RIGHT
+            // never lands inside.
+            const TIME_FALLBACK_RADIUS = 200; // pixels (~2 beats at beat=100px)
+            const nearbyNotes = activeNotes.filter(n =>
+              Math.abs(n.startTime - cx) < TIME_FALLBACK_RADIUS &&
+              !(n.startTime <= cx && cx < n.startTime + n.duration)
+            );
+            picked = pickVertical(nearbyNotes, direction as 'up' | 'down');
           }
 
           if (picked) {
@@ -600,9 +615,10 @@ export const App: React.FC = () => {
             <option value="axis_priority">Axis Priority</option>
             <option value="x_then_y">X then Y</option>
             <option value="time_harmony">Time / Harmony</option>
+            <option value="time_harmony_fallback">Time / Harmony + Fallback</option>
           </select>
         </label>
-        {snapMode === 'time_harmony' && (
+        {(snapMode === 'time_harmony' || snapMode === 'time_harmony_fallback') && (
           <label>
             PITCH GATE: {maxPitchDistance} st
             <input
@@ -629,7 +645,7 @@ export const App: React.FC = () => {
         >
           ANIMATED
         </button>
-        {snapMode !== 'time_harmony' && (
+        {snapMode !== 'time_harmony' && snapMode !== 'time_harmony_fallback' && (
           <button 
             className={preferReversible ? 'active' : ''} 
             onClick={(e) => { setPreferReversible(!preferReversible); (e.currentTarget as HTMLElement).blur(); }}
@@ -719,7 +735,10 @@ export const App: React.FC = () => {
             <p><strong>X then Y:</strong> Strict two-phase navigation. <strong>Step 1 – LEFT/RIGHT:</strong> moves the crosshair only in time to the next or previous note start. Pitch (Y position) does not change — the crosshair slides horizontally to align with a note column, but stays at its current vertical position. <strong>Step 2 – UP/DOWN:</strong> jumps vertically to the note above or below that is in the locked time column. Because a LEFT/RIGHT step guarantees at least one note exists in that column, UP/DOWN will always find a target there. Further UP/DOWN presses walk through all notes of a chord in that column. Failure mode: if no anchor column is set (e.g. after freely scrolling with SNAP off), falls back to Nearest Visual without Reversible.</p>
           )}
           {snapMode === 'time_harmony' && (
-            <p><strong>Time / Harmony:</strong> Axes are strictly separated. <strong>LEFT/RIGHT:</strong> walks through note start ticks in chronological order (nearest first) and accepts the first tick that has a note within 12 semitones (1 octave) of the current pitch. Ticks with only far-away notes are skipped. Fallback: if no tick qualifies, jumps to the nearest tick anyway. <strong>UP/DOWN:</strong> considers only notes whose duration covers the current X position ("sounding now"), then steps to the nearest pitch above or below. X never changes. Notes are treated as rectangles — a long sustained bass note is reachable via DOWN even if its start is far to the left.</p>
+            <p><strong>Time / Harmony:</strong> Axes are strictly separated. <strong>LEFT/RIGHT:</strong> walks through note start ticks in chronological order (nearest first) and accepts the first tick that has a note within the PITCH GATE semitones. Ticks with only far-away notes are skipped. Fallback: if no tick qualifies, jumps to the nearest tick anyway. <strong>UP/DOWN:</strong> considers only notes whose duration covers the current X position ("sounding now"), then steps to the nearest pitch above or below. X never changes. Notes are treated as rectangles — a long sustained bass note is reachable via DOWN even if its start is far to the left.</p>
+          )}
+          {snapMode === 'time_harmony_fallback' && (
+            <p><strong>Time / Harmony + Fallback:</strong> Identical to Time / Harmony, with one addition: <strong>UP/DOWN</strong> first searches notes sounding at the current X ("sounding now"). If no note is found in that direction, it falls back to notes whose <em>start tick</em> is within ~2 beats of the cursor — making short, isolated notes reachable that LEFT/RIGHT never lands inside. X never changes in either case.</p>
           )}
         </div>
       )}
@@ -941,6 +960,43 @@ FUNCTION snap_time_harmony(direction):
       picked = below note WITH MAX(noteNumber)  // nearest below
 
     SNAP cursor.y TO picked.noteNumber
+    // cursor.x is NEVER changed by UP/DOWN` : snapMode === 'time_harmony_fallback' ?
+`// ─── TIME / HARMONY + FALLBACK ────────────────────────
+// Identical to Time / Harmony for LEFT/RIGHT.
+// UP/DOWN adds a second search pass if the primary fails.
+
+FUNCTION snap_time_harmony_fallback(direction):
+
+  cursor_x     = crosshair.x
+  cursor_pitch = 127 - floor(cursor_y / KEY_HEIGHT)
+  MAX_PITCH_DISTANCE  = <PITCH GATE slider value>
+  TIME_FALLBACK_RADIUS = 200  // pixels (~2 beats at beat=100px)
+
+  IF direction IN (LEFT, RIGHT):
+    // ── Same as Time / Harmony ────────────────────────
+    // (tick-group search with pitch gate, see above)
+
+  ELSE:  // UP or DOWN
+    // ── Primary: notes sounding at current time ───────
+    sounding = notes WHERE startTick <= cursor_x < startTick + duration
+
+    picked = pitch-nearest note above/below cursor_pitch in sounding
+    // (UP → MIN above, DOWN → MAX below)
+
+    IF picked is NOT NULL:
+      SNAP cursor.y TO picked.noteNumber
+      RETURN
+
+    // ── Fallback: notes starting near cursor.x ────────
+    // Catches short notes that LEFT/RIGHT never lands inside.
+    nearby = notes WHERE |startTick - cursor_x| < TIME_FALLBACK_RADIUS
+                     AND NOT already in sounding
+
+    picked = pitch-nearest note above/below cursor_pitch in nearby
+
+    IF picked is NOT NULL:
+      SNAP cursor.y TO picked.noteNumber
+
     // cursor.x is NEVER changed by UP/DOWN` : snapMode === 'x_then_y' ?
 `// ─── X THEN Y ─────────────────────────────────────────
 // Two-phase navigation: LEFT/RIGHT locks to a time column,
