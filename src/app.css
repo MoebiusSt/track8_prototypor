@@ -133,6 +133,12 @@ body {
   height: calc(var(--key-height));
 }
 
+.midi-note--highlighted {
+  background-color: var(--color-crosshair);
+  border-color: #ffb347;
+  box-shadow: 0 0 8px rgba(255, 160, 52, 0.8);
+}
+
 .crosshair {
   position: absolute;
   top: 50%;
