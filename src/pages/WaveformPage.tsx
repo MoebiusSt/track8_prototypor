@@ -25,6 +25,14 @@ const LIFT_GRID_X = 2;
 /** Right-drag eraser radius (px, world). */
 const ERASER_RADIUS_PX = 26;
 
+type PolylineRenderMode = 'plain' | 'blackOutline' | 'multiplyHalo';
+
+const POLYLINE_MODE_SVG_CLASS: Record<PolylineRenderMode, string> = {
+  plain: 'waveform-svg--mode-plain',
+  blackOutline: 'waveform-svg--mode-black-outline',
+  multiplyHalo: 'waveform-svg--mode-multiply-halo',
+};
+
 function clampScroll(x: number): number {
   return Math.max(0, Math.min(MAX_SCROLL, Math.round(x)));
 }
@@ -42,7 +50,7 @@ function generateStereoAmplitudes(count: number): { l: number[]; r: number[] } {
 }
 
 /** Initial polyline: max |y - mid| = this fraction of (half the drawable band). 0.5 → 50% of full swing. */
-const INITIAL_POLY_AMPLITUDE_FRAC = 0.5;
+const INITIAL_POLY_AMPLITUDE_FRAC = 0.7;
 
 function generatePolylineWorld(contentW: number, vh: number): { x: number; y: number }[] {
   const pts: { x: number; y: number }[] = [];
@@ -55,19 +63,19 @@ function generatePolylineWorld(contentW: number, vh: number): { x: number; y: nu
   let x = 0;
   let y = midY;
   type Regime = 'calm' | 'wild';
-  let regime: Regime = Math.random() < 0.55 ? 'wild' : 'calm';
+  let regime: Regime = Math.random() < 0.82 ? 'wild' : 'calm';
   let regimeSegLeft = 0;
 
   while (x <= contentW) {
     pts.push({ x: Math.round(x), y: Math.round(y) });
 
     if (regimeSegLeft <= 0) {
-      // Bias toward wild: higher point density, less long flat runs overall
-      regime = Math.random() < 0.58 ? 'wild' : 'calm';
+      // Heavy bias to wild: short calm pockets, long rough stretches
+      regime = Math.random() < 0.8 ? 'wild' : 'calm';
       regimeSegLeft =
         regime === 'calm'
-          ? 5 + Math.floor(Math.random() * 16)
-          : 8 + Math.floor(Math.random() * 26);
+          ? 3 + Math.floor(Math.random() * 9)
+          : 14 + Math.floor(Math.random() * 36);
     }
     regimeSegLeft--;
 
@@ -75,19 +83,19 @@ function generatePolylineWorld(contentW: number, vh: number): { x: number; y: nu
     let maxDY: number;
 
     if (regime === 'calm') {
-      // Still visibly calm but not endless straight lines
-      stepX = POLY_STEP * 2.2 + Math.random() * POLY_STEP * 9;
-      maxDY = range * (0.014 + Math.random() * 0.028);
-      if (Math.random() < 0.18) {
-        stepX *= 0.65;
-        maxDY *= 1.35;
+      // Rare calm: shorter X steps than before so it is not a long flat run
+      stepX = POLY_STEP * 1.5 + Math.random() * POLY_STEP * 6;
+      maxDY = range * (0.018 + Math.random() * 0.032);
+      if (Math.random() < 0.22) {
+        stepX *= 0.6;
+        maxDY *= 1.4;
       }
     } else {
-      // High-frequency sampling, stronger vertical jitter within amp
-      stepX = POLY_STEP * 0.18 + Math.random() * POLY_STEP * 1.15;
-      maxDY = range * (0.055 + Math.random() * 0.14);
-      if (Math.random() < 0.34) maxDY *= 1.5;
-      if (Math.random() < 0.2) stepX *= 0.5;
+      // Wild: denser samples, rougher vertical moves (same amp clamp)
+      stepX = POLY_STEP * 0.1 + Math.random() * POLY_STEP * 0.95;
+      maxDY = range * (0.062 + Math.random() * 0.16);
+      if (Math.random() < 0.38) maxDY *= 1.55;
+      if (Math.random() < 0.26) stepX *= 0.45;
     }
 
     y += (Math.random() - 0.5) * 2 * maxDY;
@@ -201,7 +209,7 @@ export const WaveformPage: React.FC = () => {
   const pointerRafRef = useRef<number | null>(null);
 
   const [scrollX, setScrollX] = useState(0);
-  const [polylineOutline, setPolylineOutline] = useState(false);
+  const [polylineMode, setPolylineMode] = useState<PolylineRenderMode>('plain');
   const [polyWorld, setPolyWorld] = useState<{ x: number; y: number }[]>(() =>
     generatePolylineWorld(CONTENT_WIDTH, VISIBLE_HEIGHT)
   );
@@ -380,18 +388,21 @@ export const WaveformPage: React.FC = () => {
       </nav>
       <div className="waveform-controls">
         <label>
-          <input
-            type="checkbox"
-            checked={polylineOutline}
-            onChange={(ev) => setPolylineOutline(ev.target.checked)}
-          />
-          Polyline black outline (1px)
+          Polyline render:
+          <select
+            value={polylineMode}
+            onChange={(ev) => setPolylineMode(ev.target.value as PolylineRenderMode)}
+          >
+            <option value="plain">Orange only (1px)</option>
+            <option value="blackOutline">Black outline (1px + 3px)</option>
+            <option value="multiplyHalo">Multiply halo (2px + 8px)</option>
+          </select>
         </label>
       </div>
       <div className="waveform-viewport device-viewport">
         <svg
           ref={svgRef}
-          className="waveform-svg waveform-svg--edit"
+          className={`waveform-svg waveform-svg--edit ${POLYLINE_MODE_SVG_CLASS[polylineMode]}`}
           viewBox={`0 0 ${VISIBLE_WIDTH} ${VISIBLE_HEIGHT}`}
           width={VISIBLE_WIDTH}
           height={VISIBLE_HEIGHT}
@@ -407,7 +418,7 @@ export const WaveformPage: React.FC = () => {
           <g className="waveform-svg__bars">{barRects}</g>
           {polyPointsAttr ? (
             <>
-              {polylineOutline && (
+              {(polylineMode === 'blackOutline' || polylineMode === 'multiplyHalo') && (
                 <polyline
                   className="waveform-svg__poly waveform-svg__poly--outline"
                   fill="none"
@@ -429,6 +440,23 @@ export const WaveformPage: React.FC = () => {
             height={VISIBLE_HEIGHT}
           />
         </svg>
+      </div>
+      <div className="snap-description waveform-mode-description">
+        {polylineMode === 'plain' && (
+          <p>
+            <strong>Nur Orange 1px:</strong> Eine orangefarbene Linie mit <code>1px</code> Strichbreite. Problem: optical mixing of colors in details smaller than human visual resolition (partitive mixing) of colors in the 2px raster of light green darkgreen background. Additionally problematic due to complementry colors (orange and green). 
+          </p>
+        )}
+        {polylineMode === 'blackOutline' && (
+          <p>
+            <strong>Simple black outline:</strong> <code>1px</code> orange line, and <code>3px</code> hard black outline below, 1px around the orange line.
+          </p>
+        )}
+        {polylineMode === 'multiplyHalo' && (
+          <p>
+            <strong>Multiply-Outline-fatter:</strong> <code>2px</code> orange line, with <code>8px</code>-Outline below (<code>4px</code> each side). Color: = backgroundcolor in 60% translucency.
+          </p>
+        )}
       </div>
       <div className="instructions">
         Horizontal scroll: Arrow Left / Arrow Right ({SCROLL_STEP}px steps). Left mouse button: DRAW curve. Right drag: erase points.

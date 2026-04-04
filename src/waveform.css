@@ -1,7 +1,7 @@
 /* Waveform viewport — tweak in DevTools (variables + classes on SVG children). */
 .waveform-svg {
   --waveform-bg: var(--color-waveform-bg, #0d2818);
-  --waveform-bar: #7fff7f;
+  --waveform-bar: #61ff53;
   --waveform-poly-stroke: #ff8800;
   --waveform-poly-outline-stroke: #000000;
   --waveform-playhead: #7fffff;
@@ -28,20 +28,50 @@
 }
 
 .waveform-svg__poly {
+  fill: none;
   shape-rendering: geometricPrecision;
-  stroke-linecap: butt;
-  stroke-linejoin: miter;
   vector-effect: non-scaling-stroke;
 }
 
-.waveform-svg__poly--outline {
-  stroke: var(--waveform-poly-outline-stroke);
-  stroke-width: 3px;
-}
-
-.waveform-svg__poly--main {
+/* --- Plain: orange 1px only --- */
+.waveform-svg--mode-plain .waveform-svg__poly--main {
   stroke: var(--waveform-poly-stroke);
   stroke-width: 1px;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+}
+
+/* --- Black outline: 3px black under 1px orange --- */
+.waveform-svg--mode-black-outline .waveform-svg__poly--outline {
+  stroke: var(--waveform-poly-outline-stroke);
+  stroke-width: 3px;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  mix-blend-mode: normal;
+}
+
+.waveform-svg--mode-black-outline .waveform-svg__poly--main {
+  stroke: var(--waveform-poly-stroke);
+  stroke-width: 1px;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+}
+
+/* --- Multiply halo: 8px soft stroke from 60% bg + multiply, 2px orange on top --- */
+.waveform-svg--mode-multiply-halo .waveform-svg__poly--outline {
+  stroke: color-mix(in srgb, var(--waveform-bg) 60%, transparent);
+  stroke-width: 8px;
+  mix-blend-mode: multiply;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.waveform-svg--mode-multiply-halo .waveform-svg__poly--main {
+  stroke: var(--waveform-poly-stroke);
+  stroke-width: 2px;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  mix-blend-mode: normal;
 }
 
 .waveform-svg__playhead {
@@ -68,6 +98,19 @@
   font-size: 14px;
 }
 
+.waveform-controls select {
+  background-color: #222;
+  color: #fff;
+  border: 1px solid #444;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-family: inherit;
+}
+
 .waveform-viewport {
   display: block;
+}
+
+.waveform-mode-description {
+  max-width: var(--visible-width);
 }
