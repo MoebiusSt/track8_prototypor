@@ -5,4 +5,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/track8_midi-note-snap/',
+  server: {
+    watch: {
+      usePolling: true,
+      interval: 150,
+    },
+  },
 })

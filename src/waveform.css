@@ -1,0 +1,26 @@
+.waveform-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  background-color: #111;
+  padding: 10px 20px;
+  border-radius: 4px;
+  border: 1px solid #333;
+  max-width: var(--visible-width);
+}
+
+.waveform-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.waveform-viewport {
+  display: block;
+}
+
+.waveform-canvas {
+  display: block;
+}
