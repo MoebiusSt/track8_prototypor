@@ -341,6 +341,26 @@ export const WaveformPage: React.FC = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  /** Capture + non-passive so browsers can honor preventDefault on secondary button (gesture / context churn). */
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const preventSecondaryButtonDefaults = (e: Event) => {
+      const pe = e as PointerEvent | MouseEvent;
+      if (pe.button !== 2) return;
+      pe.preventDefault();
+    };
+
+    const opts: AddEventListenerOptions = { capture: true, passive: false };
+    svg.addEventListener('pointerdown', preventSecondaryButtonDefaults, opts);
+    svg.addEventListener('mousedown', preventSecondaryButtonDefaults, opts);
+    return () => {
+      svg.removeEventListener('pointerdown', preventSecondaryButtonDefaults, { capture: true });
+      svg.removeEventListener('mousedown', preventSecondaryButtonDefaults, { capture: true });
+    };
+  }, []);
+
   const scrollXRef = useRef(scrollX);
   scrollXRef.current = scrollX;
 
