@@ -93,7 +93,6 @@
   stroke: color-mix(in srgb, var(--waveform-bg) 60%, transparent);
   stroke-linecap: round;
   stroke-linejoin: round;
-  mix-blend-mode: multiply;
 }
 
 .waveform-svg--mode-multiply-halo .waveform-svg__poly--main {

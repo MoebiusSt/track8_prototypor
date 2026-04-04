@@ -599,7 +599,7 @@ export const WaveformPage: React.FC = () => {
         )}
         {polylineMode === 'multiplyHalo' && (
           <p>
-            <strong>Outline-fatter-60%:</strong> <code>2px</code> orange line, with <code>6px</code>-Outline below (<code>3px</code> each side) in backgroundcolor and 60% translucency. This even works when users use theme editor to inverse foreground and background colors, making background lighter and waveform bars darker!          </p>
+            <strong>Outline-fatter-60%:</strong> <code>2px</code> orange line, with <code>6px</code>-Outline below (<code>3px</code> each side) in backgroundcolor and 60% transparency. This even works when users use theme editor to inverse foreground and background colors, making background lighter and waveform bars darker!</p>
         )}
       </div>
       <div className="instructions">
