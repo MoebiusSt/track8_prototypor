@@ -14,12 +14,12 @@ const CONTENT_WIDTH = Math.floor(TOTAL_WIDTH / BAR_PITCH) * BAR_PITCH;
 const SAMPLE_COUNT = Math.floor(CONTENT_WIDTH / BAR_PITCH);
 const MAX_SCROLL = Math.max(0, CONTENT_WIDTH - VISIBLE_WIDTH);
 const CURSOR_X = Math.floor(VISIBLE_WIDTH / 2) - 1;
-const POLY_STEP = 8;
+const POLY_STEP = 6;
 const BASELINE_PAD = 4;
 /** Green bar height multiplier vs lane half-height (clamped to drawable range). */
 const BAR_AMPLITUDE_SCALE = 1.28;
-const POLY_Y_MIN = BASELINE_PAD + 8;
-const POLY_Y_MAX = VISIBLE_HEIGHT - BASELINE_PAD - 8;
+const POLY_Y_MIN = BASELINE_PAD + 6;
+const POLY_Y_MAX = VISIBLE_HEIGHT - BASELINE_PAD - 6;
 /** World X snap for lift stroke (px). New samples only when grid cell changes. */
 const LIFT_GRID_X = 2;
 /** Right-drag eraser radius (px, world). */
@@ -42,7 +42,7 @@ const POLYLINE_MODE_SVG_CLASS: Record<PolylineRenderMode, string> = {
 const MODE_STROKE_PRESETS: Record<PolylineRenderMode, { main: number; outline: number }> = {
   plain: { main: 1, outline: 0 },
   blackOutline: { main: 1, outline: 3 },
-  multiplyHalo: { main: 2, outline: 8 },
+  multiplyHalo: { main: 2, outline: 6 },
 };
 
 const CURSOR_LINE_X = CURSOR_X + 1;
@@ -73,8 +73,8 @@ const INITIAL_POLY_AMPLITUDE_FRAC = 0.7;
 
 function generatePolylineWorld(contentW: number, vh: number): { x: number; y: number }[] {
   const pts: { x: number; y: number }[] = [];
-  const top = BASELINE_PAD + 8;
-  const bottom = vh - BASELINE_PAD - 8;
+  const top = BASELINE_PAD + 6;
+  const bottom = vh - BASELINE_PAD - 6;
   const range = bottom - top;
   const midY = top + range * 0.5;
   const amp = (range * 0.5) * INITIAL_POLY_AMPLITUDE_FRAC;
@@ -443,7 +443,7 @@ export const WaveformPage: React.FC = () => {
           >
             <option value="plain">Plain (preset 1 / 0 px)</option>
             <option value="blackOutline">Black outline (preset 1 / 3 px)</option>
-            <option value="multiplyHalo">Multiply halo (preset 2 / 8 px)</option>
+            <option value="multiplyHalo">Multiply halo (preset 2 / 6 px)</option>
           </select>
         </label>
         <label>
@@ -579,7 +579,7 @@ export const WaveformPage: React.FC = () => {
         )}
         {polylineMode === 'multiplyHalo' && (
           <p>
-            <strong>Outline-fatter-60%:</strong> <code>2px</code> orange line, with <code>8px</code>-Outline below (<code>4px</code> each side) in backgroundcolor and 60% translucency. This even works when users use theme editor to inverse foreground and background colors, making background lighter and waveform bars darker!          </p>
+            <strong>Outline-fatter-60%:</strong> <code>2px</code> orange line, with <code>6px</code>-Outline below (<code>3px</code> each side) in backgroundcolor and 60% translucency. This even works when users use theme editor to inverse foreground and background colors, making background lighter and waveform bars darker!          </p>
         )}
       </div>
       <div className="instructions">

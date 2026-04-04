@@ -9,7 +9,7 @@
 
   --visible-width: 1280px;
   --visible-height: 400px;
-  --key-height: 8px;
+  --key-height: 6px;
   --total-width: 5000px;
   --total-keys: 128;
   --color-crosshair: #ffa034;
@@ -68,7 +68,7 @@ body {
 .controls-bar label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 14px;
 }
 
@@ -76,7 +76,7 @@ body {
   background-color: #222;
   color: #fff;
   border: 1px solid #444;
-  padding: 4px 8px;
+  padding: 4px 6px;
   border-radius: 3px;
   cursor: pointer;
   font-family: inherit;
@@ -152,7 +152,7 @@ body {
 .midi-note--highlighted {
   background-color: var(--color-crosshair);
   border-color: #ffb347;
-  box-shadow: 0 0 8px rgba(255, 160, 52, 0.8);
+  box-shadow: 0 0 6px rgba(255, 160, 52, 0.8);
 }
 
 .crosshair {

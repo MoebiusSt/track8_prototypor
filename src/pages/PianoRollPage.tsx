@@ -4,10 +4,10 @@ import '../app.css';
 
 const VISIBLE_WIDTH = 1280;
 const VISIBLE_HEIGHT = 400;
-const KEY_HEIGHT = 8;
+const KEY_HEIGHT = 6;
 // Fixed pitch weight for COUPLED W mode. Calibrated to feel natural at fine
 // grid resolutions (~1/32). Not derived from the GRID slider — that caused
-// erratic jumps at coarser grid settings. This roughly corresponds to the feel of 1/32 (mathematically, 1/32 = 12.5px / 8px = 1.56, but 3.0 would give time spacing jumps slightly more weight)
+// erratic jumps at coarser grid settings. This roughly corresponds to the feel of 1/32 (mathematically, 1/32 = 12.5px / 6px ≈ 2.08, but 3.0 would give time spacing jumps slightly more weight)
 const PITCH_BIAS = 1.8;
 const TOTAL_KEYS = 128;
 const TOTAL_WIDTH = 5000;
