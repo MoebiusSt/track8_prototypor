@@ -38,6 +38,20 @@ const POLYLINE_MODE_SVG_CLASS: Record<PolylineRenderMode, string> = {
   multiplyHalo: 'waveform-svg--mode-multiply-halo',
 };
 
+/** Spinner defaults when switching render mode (dropdown). */
+const MODE_STROKE_PRESETS: Record<PolylineRenderMode, { main: number; outline: number }> = {
+  plain: { main: 1, outline: 0 },
+  blackOutline: { main: 1, outline: 3 },
+  multiplyHalo: { main: 2, outline: 8 },
+};
+
+const CURSOR_LINE_X = CURSOR_X + 1;
+
+function clampStrokeWidth(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
 function clampScroll(x: number): number {
   return Math.max(0, Math.min(MAX_SCROLL, Math.round(x)));
 }
@@ -215,6 +229,8 @@ export const WaveformPage: React.FC = () => {
 
   const [scrollX, setScrollX] = useState(0);
   const [polylineMode, setPolylineMode] = useState<PolylineRenderMode>('plain');
+  const [polyStrokeWidth, setPolyStrokeWidth] = useState(MODE_STROKE_PRESETS.plain.main);
+  const [outlineStrokeWidth, setOutlineStrokeWidth] = useState(MODE_STROKE_PRESETS.plain.outline);
   const [colorBackground, setColorBackground] = useState(DEFAULT_COLOR_WAVEFORM_BG);
   const [colorBars, setColorBars] = useState(DEFAULT_COLOR_WAVEFORM_BAR);
   const [colorPolyline, setColorPolyline] = useState(DEFAULT_COLOR_WAVEFORM_POLY);
@@ -280,8 +296,10 @@ export const WaveformPage: React.FC = () => {
       '--waveform-bg': bgResolved,
       '--waveform-bar': barResolved,
       '--waveform-poly-stroke': colorPolyline,
+      '--waveform-poly-main-width': `${polyStrokeWidth}px`,
+      '--waveform-poly-outline-width': `${outlineStrokeWidth}px`,
     } as React.CSSProperties;
-  }, [colorBackground, colorBars, colorPolyline, invertBarBackground]);
+  }, [colorBackground, colorBars, colorPolyline, invertBarBackground, polyStrokeWidth, outlineStrokeWidth]);
 
   const flushPendingPointerPoly = useCallback(() => {
     const lift = pendingLiftRef.current;
@@ -415,12 +433,46 @@ export const WaveformPage: React.FC = () => {
           Polyline render:
           <select
             value={polylineMode}
-            onChange={(ev) => setPolylineMode(ev.target.value as PolylineRenderMode)}
+            onChange={(ev) => {
+              const m = ev.target.value as PolylineRenderMode;
+              setPolylineMode(m);
+              const p = MODE_STROKE_PRESETS[m];
+              setPolyStrokeWidth(p.main);
+              setOutlineStrokeWidth(p.outline);
+            }}
           >
-            <option value="plain">Orange only (1px)</option>
-            <option value="blackOutline">Black outline (1px + 3px)</option>
-            <option value="multiplyHalo">Multiply halo (2px + 8px)</option>
+            <option value="plain">Plain (preset 1 / 0 px)</option>
+            <option value="blackOutline">Black outline (preset 1 / 3 px)</option>
+            <option value="multiplyHalo">Multiply halo (preset 2 / 8 px)</option>
           </select>
+        </label>
+        <label>
+          Poly width (px)
+          <input
+            type="number"
+            min={0.25}
+            max={32}
+            step={0.25}
+            value={polyStrokeWidth}
+            onChange={(ev) =>
+              setPolyStrokeWidth(clampStrokeWidth(parseFloat(ev.target.value), 0.25, 32))
+            }
+            aria-label="Polyline and playhead main stroke width in pixels"
+          />
+        </label>
+        <label>
+          Outline width (px)
+          <input
+            type="number"
+            min={0}
+            max={48}
+            step={0.25}
+            value={outlineStrokeWidth}
+            onChange={(ev) =>
+              setOutlineStrokeWidth(clampStrokeWidth(parseFloat(ev.target.value), 0, 48))
+            }
+            aria-label="Polyline and playhead outline stroke width in pixels; 0 hides outline"
+          />
         </label>
         <label>
           Background
@@ -482,7 +534,7 @@ export const WaveformPage: React.FC = () => {
           <g className="waveform-svg__bars">{barRects}</g>
           {polyPointsAttr ? (
             <>
-              {(polylineMode === 'blackOutline' || polylineMode === 'multiplyHalo') && (
+              {outlineStrokeWidth > 0 && (
                 <polyline
                   className="waveform-svg__poly waveform-svg__poly--outline"
                   fill="none"
@@ -496,12 +548,21 @@ export const WaveformPage: React.FC = () => {
               />
             </>
           ) : null}
-          <rect
-            className="waveform-svg__playhead"
-            x={CURSOR_X}
-            y={0}
-            width={2}
-            height={VISIBLE_HEIGHT}
+          {outlineStrokeWidth > 0 && (
+            <line
+              className="waveform-svg__cursor waveform-svg__cursor--outline"
+              x1={CURSOR_LINE_X}
+              y1={0}
+              x2={CURSOR_LINE_X}
+              y2={VISIBLE_HEIGHT}
+            />
+          )}
+          <line
+            className="waveform-svg__cursor waveform-svg__cursor--main"
+            x1={CURSOR_LINE_X}
+            y1={0}
+            x2={CURSOR_LINE_X}
+            y2={VISIBLE_HEIGHT}
           />
         </svg>
       </div>

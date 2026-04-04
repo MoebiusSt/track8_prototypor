@@ -5,9 +5,10 @@
   --waveform-poly-stroke: #ff8800;
   --waveform-poly-outline-stroke: #000000;
   --waveform-playhead: #7fffff;
+  --waveform-poly-main-width: 1px;
+  --waveform-poly-outline-width: 0px;
 
   display: block;
-  vertical-align: top;
 }
 
 .waveform-svg--edit {
@@ -27,24 +28,48 @@
   fill: var(--waveform-bar);
 }
 
-.waveform-svg__poly {
+.waveform-svg__poly,
+.waveform-svg__cursor {
   fill: none;
   shape-rendering: geometricPrecision;
   vector-effect: non-scaling-stroke;
 }
 
-/* --- Plain: orange 1px only --- */
+.waveform-svg__poly--main,
+.waveform-svg__cursor--main {
+  stroke-width: var(--waveform-poly-main-width);
+}
+
+.waveform-svg__poly--outline,
+.waveform-svg__cursor--outline {
+  stroke-width: var(--waveform-poly-outline-width);
+}
+
+/* --- Plain --- */
 .waveform-svg--mode-plain .waveform-svg__poly--main {
   stroke: var(--waveform-poly-stroke);
-  stroke-width: 1px;
   stroke-linecap: butt;
   stroke-linejoin: miter;
 }
 
-/* --- Black outline: 3px black under 1px orange --- */
-.waveform-svg--mode-black-outline .waveform-svg__poly--outline {
+.waveform-svg--mode-plain .waveform-svg__cursor--main {
+  stroke: var(--waveform-playhead);
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+}
+
+.waveform-svg--mode-plain .waveform-svg__poly--outline,
+.waveform-svg--mode-plain .waveform-svg__cursor--outline {
   stroke: var(--waveform-poly-outline-stroke);
-  stroke-width: 3px;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  mix-blend-mode: normal;
+}
+
+/* --- Black outline --- */
+.waveform-svg--mode-black-outline .waveform-svg__poly--outline,
+.waveform-svg--mode-black-outline .waveform-svg__cursor--outline {
+  stroke: var(--waveform-poly-outline-stroke);
   stroke-linecap: butt;
   stroke-linejoin: miter;
   mix-blend-mode: normal;
@@ -52,30 +77,37 @@
 
 .waveform-svg--mode-black-outline .waveform-svg__poly--main {
   stroke: var(--waveform-poly-stroke);
-  stroke-width: 1px;
   stroke-linecap: butt;
   stroke-linejoin: miter;
 }
 
-/* --- Multiply halo: 8px soft stroke from 60% bg + multiply, 2px orange on top --- */
-.waveform-svg--mode-multiply-halo .waveform-svg__poly--outline {
+.waveform-svg--mode-black-outline .waveform-svg__cursor--main {
+  stroke: var(--waveform-playhead);
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+}
+
+/* --- Multiply halo --- */
+.waveform-svg--mode-multiply-halo .waveform-svg__poly--outline,
+.waveform-svg--mode-multiply-halo .waveform-svg__cursor--outline {
   stroke: color-mix(in srgb, var(--waveform-bg) 60%, transparent);
-  stroke-width: 8px;
   stroke-linecap: round;
   stroke-linejoin: round;
+  mix-blend-mode: multiply;
 }
 
 .waveform-svg--mode-multiply-halo .waveform-svg__poly--main {
   stroke: var(--waveform-poly-stroke);
-  stroke-width: 2px;
   stroke-linecap: butt;
   stroke-linejoin: miter;
   mix-blend-mode: normal;
 }
 
-.waveform-svg__playhead {
-  fill: var(--waveform-playhead);
-  shape-rendering: crispEdges;
+.waveform-svg--mode-multiply-halo .waveform-svg__cursor--main {
+  stroke: var(--waveform-playhead);
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  mix-blend-mode: normal;
 }
 
 .waveform-controls {
@@ -115,6 +147,16 @@
   cursor: pointer;
   background-color: #222;
   vertical-align: middle;
+}
+
+.waveform-controls input[type="number"] {
+  width: 4.25rem;
+  background-color: #222;
+  color: #fff;
+  border: 1px solid #444;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font-family: inherit;
 }
 
 .waveform-controls button {
