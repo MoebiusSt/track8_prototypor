@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   BAR_PITCH,
@@ -16,154 +16,17 @@ const MAX_SCROLL = Math.max(0, CONTENT_WIDTH - VISIBLE_WIDTH);
 const CURSOR_X = Math.floor(VISIBLE_WIDTH / 2) - 1;
 const POLY_STEP = 8;
 const BASELINE_PAD = 4;
-
-const COLORS = {
-  bg: '#0d2818',
-  bar: '#7fff7f',
-  orange: '#ff8800',
-  outline: '#000000',
-  cyan: '#7fffff',
-} as const;
+/** Green bar height multiplier vs lane half-height (clamped to drawable range). */
+const BAR_AMPLITUDE_SCALE = 1.28;
+const POLY_Y_MIN = BASELINE_PAD + 8;
+const POLY_Y_MAX = VISIBLE_HEIGHT - BASELINE_PAD - 8;
+/** World X snap for lift stroke (px). New samples only when grid cell changes. */
+const LIFT_GRID_X = 2;
+/** Right-drag eraser radius (px, world). */
+const ERASER_RADIUS_PX = 26;
 
 function clampScroll(x: number): number {
   return Math.max(0, Math.min(MAX_SCROLL, Math.round(x)));
-}
-
-function drawPixelClipped(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  color: string,
-  clipW: number,
-  clipH: number
-): void {
-  const xi = Math.round(x);
-  const yi = Math.round(y);
-  if (xi < 0 || xi >= clipW || yi < 0 || yi >= clipH) return;
-  ctx.fillStyle = color;
-  ctx.fillRect(xi, yi, 1, 1);
-}
-
-/** Integer grid Bresenham line (1px steps, no anti-aliasing). */
-function strokeLineBresenham(
-  ctx: CanvasRenderingContext2D,
-  x0: number, y0: number,
-  x1: number, y1: number,
-  color: string,
-  clipW: number, clipH: number
-): void {
-  let x0i = Math.round(x0);
-  let y0i = Math.round(y0);
-  const x1i = Math.round(x1);
-  const y1i = Math.round(y1);
-  const dx = Math.abs(x1i - x0i);
-  const dy = Math.abs(y1i - y0i);
-  const sx = x0i < x1i ? 1 : -1;
-  const sy = y0i < y1i ? 1 : -1;
-  let err = dx - dy;
-  for (;;) {
-    drawPixelClipped(ctx, x0i, y0i, color, clipW, clipH);
-    if (x0i === x1i && y0i === y1i) break;
-    const e2 = 2 * err;
-    if (e2 > -dy) { err -= dy; x0i += sx; }
-    if (e2 < dx)  { err += dx; y0i += sy; }
-  }
-}
-
-/** Collect Bresenham pixel coordinates within clip (for outline pass). */
-function collectBresenhamPixels(
-  x0: number, y0: number,
-  x1: number, y1: number,
-  clipW: number, clipH: number,
-  into: Set<string>
-): void {
-  let x0i = Math.round(x0);
-  let y0i = Math.round(y0);
-  const x1i = Math.round(x1);
-  const y1i = Math.round(y1);
-  const dx = Math.abs(x1i - x0i);
-  const dy = Math.abs(y1i - y0i);
-  const sx = x0i < x1i ? 1 : -1;
-  const sy = y0i < y1i ? 1 : -1;
-  let err = dx - dy;
-  for (;;) {
-    if (x0i >= 0 && x0i < clipW && y0i >= 0 && y0i < clipH) {
-      into.add(`${x0i},${y0i}`);
-    }
-    if (x0i === x1i && y0i === y1i) break;
-    const e2 = 2 * err;
-    if (e2 > -dy) { err -= dy; x0i += sx; }
-    if (e2 < dx)  { err += dx; y0i += sy; }
-  }
-}
-
-const NEIGHBOR8: readonly [number, number][] = [
-  [-1, -1], [0, -1], [1, -1],
-  [-1, 0],           [1, 0],
-  [-1, 1], [0, 1], [1, 1],
-];
-
-/** 1px Bresenham polyline; optional 1px black outline (8-neighbor ring outside the line). */
-function drawPolylineBresenham(
-  ctx: CanvasRenderingContext2D,
-  polyWorld: { x: number; y: number }[],
-  scroll: number,
-  clipW: number,
-  clipH: number,
-  outline: boolean
-): void {
-  if (polyWorld.length < 2) return;
-
-  if (!outline) {
-    for (let i = 0; i < polyWorld.length - 1; i++) {
-      const a = polyWorld[i]!;
-      const b = polyWorld[i + 1]!;
-      strokeLineBresenham(
-        ctx,
-        a.x - scroll, a.y,
-        b.x - scroll, b.y,
-        COLORS.orange,
-        clipW,
-        clipH
-      );
-    }
-    return;
-  }
-
-  const linePixels = new Set<string>();
-  for (let i = 0; i < polyWorld.length - 1; i++) {
-    const a = polyWorld[i]!;
-    const b = polyWorld[i + 1]!;
-    collectBresenhamPixels(
-      a.x - scroll, a.y,
-      b.x - scroll, b.y,
-      clipW,
-      clipH,
-      linePixels
-    );
-  }
-
-  for (const key of linePixels) {
-    const comma = key.indexOf(',');
-    const x = Number(key.slice(0, comma));
-    const y = Number(key.slice(comma + 1));
-    for (const [dx, dy] of NEIGHBOR8) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || nx >= clipW || ny < 0 || ny >= clipH) continue;
-      const nk = `${nx},${ny}`;
-      if (!linePixels.has(nk)) {
-        drawPixelClipped(ctx, nx, ny, COLORS.outline, clipW, clipH);
-      }
-    }
-  }
-
-  for (const key of linePixels) {
-    const comma = key.indexOf(',');
-    const x = Number(key.slice(0, comma));
-    const y = Number(key.slice(comma + 1));
-    drawPixelClipped(ctx, x, y, COLORS.orange, clipW, clipH);
-  }
 }
 
 function generateStereoAmplitudes(count: number): { l: number[]; r: number[] } {
@@ -178,86 +41,244 @@ function generateStereoAmplitudes(count: number): { l: number[]; r: number[] } {
   return { l, r };
 }
 
+/** Initial polyline: max |y - mid| = this fraction of (half the drawable band). 0.5 → 50% of full swing. */
+const INITIAL_POLY_AMPLITUDE_FRAC = 0.5;
+
 function generatePolylineWorld(contentW: number, vh: number): { x: number; y: number }[] {
   const pts: { x: number; y: number }[] = [];
   const top = BASELINE_PAD + 8;
   const bottom = vh - BASELINE_PAD - 8;
   const range = bottom - top;
+  const midY = top + range * 0.5;
+  const amp = (range * 0.5) * INITIAL_POLY_AMPLITUDE_FRAC;
+
   let x = 0;
-  let y = top + range * 0.5;
+  let y = midY;
+  type Regime = 'calm' | 'wild';
+  let regime: Regime = Math.random() < 0.55 ? 'wild' : 'calm';
+  let regimeSegLeft = 0;
+
   while (x <= contentW) {
     pts.push({ x: Math.round(x), y: Math.round(y) });
-    // 30% chance of a longer flat run (32–96 px, tiny vertical drift)
-    const flat = Math.random() < 0.3;
-    const stepX = flat
-      ? POLY_STEP * 4 + Math.random() * POLY_STEP * 8
-      : POLY_STEP * 0.75 + Math.random() * POLY_STEP * 1.5;
-    const maxDY = flat ? range * 0.04 : range * 0.38;
-    y = Math.max(top, Math.min(bottom, y + (Math.random() - 0.5) * 2 * maxDY));
+
+    if (regimeSegLeft <= 0) {
+      // Bias toward wild: higher point density, less long flat runs overall
+      regime = Math.random() < 0.58 ? 'wild' : 'calm';
+      regimeSegLeft =
+        regime === 'calm'
+          ? 5 + Math.floor(Math.random() * 16)
+          : 8 + Math.floor(Math.random() * 26);
+    }
+    regimeSegLeft--;
+
+    let stepX: number;
+    let maxDY: number;
+
+    if (regime === 'calm') {
+      // Still visibly calm but not endless straight lines
+      stepX = POLY_STEP * 2.2 + Math.random() * POLY_STEP * 9;
+      maxDY = range * (0.014 + Math.random() * 0.028);
+      if (Math.random() < 0.18) {
+        stepX *= 0.65;
+        maxDY *= 1.35;
+      }
+    } else {
+      // High-frequency sampling, stronger vertical jitter within amp
+      stepX = POLY_STEP * 0.18 + Math.random() * POLY_STEP * 1.15;
+      maxDY = range * (0.055 + Math.random() * 0.14);
+      if (Math.random() < 0.34) maxDY *= 1.5;
+      if (Math.random() < 0.2) stepX *= 0.5;
+    }
+
+    y += (Math.random() - 0.5) * 2 * maxDY;
+    y = Math.max(midY - amp, Math.min(midY + amp, y));
     x += stepX;
   }
   return pts;
 }
 
-function setupHiDpiCanvas(
-  canvas: HTMLCanvasElement, logicalW: number, logicalH: number
-): { ctx: CanvasRenderingContext2D; dpr: number } {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  canvas.width = Math.round(logicalW * dpr);
-  canvas.height = Math.round(logicalH * dpr);
-  canvas.style.width = `${logicalW}px`;
-  canvas.style.height = `${logicalH}px`;
-  const ctx = canvas.getContext('2d', { alpha: false });
-  if (!ctx) throw new Error('2d context');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.imageSmoothingEnabled = false;
-  return { ctx, dpr };
+function clampPolyY(y: number): number {
+  return Math.max(POLY_Y_MIN, Math.min(POLY_Y_MAX, y));
+}
+
+function clampWorldX(x: number): number {
+  return Math.max(0, Math.min(CONTENT_WIDTH, x));
+}
+
+function viewportToLogical(
+  el: Element,
+  clientX: number,
+  clientY: number
+): { lx: number; ly: number } {
+  const r = el.getBoundingClientRect();
+  const lx = ((clientX - r.left) / r.width) * VISIBLE_WIDTH;
+  const ly = ((clientY - r.top) / r.height) * VISIBLE_HEIGHT;
+  return { lx, ly };
+}
+
+function distSq(ax: number, ay: number, bx: number, by: number): number {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return dx * dx + dy * dy;
+}
+
+function snapLiftWorldX(wx: number): number {
+  const c = clampWorldX(wx);
+  return Math.round(c / LIFT_GRID_X) * LIFT_GRID_X;
+}
+
+/**
+ * Vertical lift at world X: clamp X to polyline span, then set height to wy at that X.
+ * Vertices keep strictly increasing X (graph of y over x) → no self-intersections.
+ */
+function liftPolylineAtX(
+  poly: { x: number; y: number }[],
+  gx: number,
+  wy: number
+): { x: number; y: number }[] {
+  const y = Math.round(clampPolyY(wy));
+  const n = poly.length;
+  if (n < 2) return poly;
+
+  if (gx < poly[0]!.x) {
+    const c = poly.slice();
+    c[0] = { x: c[0]!.x, y };
+    return c;
+  }
+  if (gx > poly[n - 1]!.x) {
+    const c = poly.slice();
+    c[n - 1] = { x: c[n - 1]!.x, y };
+    return c;
+  }
+
+  let i = 0;
+  while (i + 1 < n && poly[i + 1]!.x < gx) i++;
+
+  const a = poly[i]!;
+  const b = poly[i + 1]!;
+
+  if (a.x === gx) {
+    const c = poly.slice();
+    c[i] = { x: a.x, y };
+    return c;
+  }
+  if (b.x === gx) {
+    const c = poly.slice();
+    c[i + 1] = { x: b.x, y };
+    return c;
+  }
+
+  if (a.x < gx && gx < b.x) {
+    return [...poly.slice(0, i + 1), { x: gx, y }, ...poly.slice(i + 1)];
+  }
+
+  return poly;
+}
+
+/** Right eraser: drop vertices inside radius (keep endpoints). */
+function applyPolyEraser(
+  poly: { x: number; y: number }[],
+  wx: number,
+  wy: number
+): { x: number; y: number }[] {
+  if (poly.length <= 2) return poly;
+  const r2 = ERASER_RADIUS_PX * ERASER_RADIUS_PX;
+  const last = poly.length - 1;
+  const filtered = poly.filter((pt, i) => {
+    if (i === 0 || i === last) return true;
+    return distSq(pt.x, pt.y, wx, wy) > r2;
+  });
+  if (filtered.length < 2) {
+    return [poly[0]!, poly[last]!];
+  }
+  return filtered;
 }
 
 export const WaveformPage: React.FC = () => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const pendingLiftRef = useRef<{ gx: number; wy: number } | null>(null);
+  const pendingEraseRef = useRef<{ wx: number; wy: number } | null>(null);
+  const pointerRafRef = useRef<number | null>(null);
 
   const [scrollX, setScrollX] = useState(0);
   const [polylineOutline, setPolylineOutline] = useState(false);
+  const [polyWorld, setPolyWorld] = useState<{ x: number; y: number }[]>(() =>
+    generatePolylineWorld(CONTENT_WIDTH, VISIBLE_HEIGHT)
+  );
 
   const amplitudes = useMemo(() => generateStereoAmplitudes(SAMPLE_COUNT), []);
-  const polyWorld = useMemo(() => generatePolylineWorld(CONTENT_WIDTH, VISIBLE_HEIGHT), []);
 
-  const drawBars = useCallback((ctx: CanvasRenderingContext2D, scroll: number, x0: number, x1: number) => {
-    ctx.fillStyle = COLORS.bg;
-    ctx.fillRect(x0, 0, x1 - x0, VISIBLE_HEIGHT);
+  const barRects = useMemo(() => {
     const center = Math.round(VISIBLE_HEIGHT / 2);
     const maxHalf = center - BASELINE_PAD - 1;
-    const colStart = Math.max(0, Math.floor((scroll + x0) / BAR_PITCH));
-    const colEnd = Math.min(SAMPLE_COUNT - 1, Math.ceil((scroll + x1) / BAR_PITCH));
-    ctx.fillStyle = COLORS.bar;
+    const x0 = 0;
+    const x1 = VISIBLE_WIDTH;
+    const colStart = Math.max(0, Math.floor((scrollX + x0) / BAR_PITCH));
+    const colEnd = Math.min(SAMPLE_COUNT - 1, Math.ceil((scrollX + x1) / BAR_PITCH));
+    const out: React.ReactElement[] = [];
     for (let col = colStart; col <= colEnd; col++) {
-      const sx = col * BAR_PITCH - scroll;
+      const sx = col * BAR_PITCH - scrollX;
       if (sx + 2 <= x0 || sx >= x1) continue;
       const barX = Math.floor(sx);
-      const hL = Math.max(1, Math.round((amplitudes.l[col] ?? 0) * maxHalf));
-      ctx.fillRect(barX, center - hL, 2, hL);
-      const hR = Math.max(1, Math.round((amplitudes.r[col] ?? 0) * maxHalf));
-      ctx.fillRect(barX, center + 1, 2, hR);
+      const hL = Math.max(1, Math.min(maxHalf, Math.round((amplitudes.l[col] ?? 0) * maxHalf * BAR_AMPLITUDE_SCALE)));
+      const hR = Math.max(1, Math.min(maxHalf, Math.round((amplitudes.r[col] ?? 0) * maxHalf * BAR_AMPLITUDE_SCALE)));
+      out.push(
+        <rect
+          key={`b-${col}-l`}
+          className="waveform-svg__bar waveform-svg__bar--l"
+          x={barX}
+          y={center - hL}
+          width={2}
+          height={hL}
+        />
+      );
+      out.push(
+        <rect
+          key={`b-${col}-r`}
+          className="waveform-svg__bar waveform-svg__bar--r"
+          x={barX}
+          y={center + 1}
+          width={2}
+          height={hR}
+        />
+      );
     }
-  }, [amplitudes]);
+    return out;
+  }, [scrollX, amplitudes]);
 
-  const redraw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const { ctx } = setupHiDpiCanvas(canvas, VISIBLE_WIDTH, VISIBLE_HEIGHT);
-    drawBars(ctx, scrollX, 0, VISIBLE_WIDTH);
-    drawPolylineBresenham(ctx, polyWorld, scrollX, VISIBLE_WIDTH, VISIBLE_HEIGHT, polylineOutline);
-    ctx.fillStyle = COLORS.cyan;
-    ctx.fillRect(CURSOR_X, 0, 2, VISIBLE_HEIGHT);
-  }, [scrollX, polylineOutline, drawBars, polyWorld]);
+  const polyPointsAttr = useMemo(() => {
+    if (polyWorld.length < 2) return '';
+    return polyWorld.map((p) => `${p.x - scrollX},${p.y}`).join(' ');
+  }, [polyWorld, scrollX]);
 
-  useLayoutEffect(() => { redraw(); }, [redraw]);
-  useEffect(() => {
-    const onResize = () => redraw();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [redraw]);
+  const flushPendingPointerPoly = useCallback(() => {
+    const lift = pendingLiftRef.current;
+    const erase = pendingEraseRef.current;
+    pendingLiftRef.current = null;
+    pendingEraseRef.current = null;
+    if (lift === null && erase === null) return;
+    setPolyWorld((prev) => {
+      let next = prev;
+      if (lift) next = liftPolylineAtX(next, lift.gx, lift.wy);
+      if (erase) next = applyPolyEraser(next, erase.wx, erase.wy);
+      return next;
+    });
+  }, []);
+
+  const schedulePointerPolyFlush = useCallback(() => {
+    if (pointerRafRef.current !== null) return;
+    pointerRafRef.current = requestAnimationFrame(() => {
+      pointerRafRef.current = null;
+      flushPendingPointerPoly();
+    });
+  }, [flushPendingPointerPoly]);
+
+  useEffect(
+    () => () => {
+      if (pointerRafRef.current !== null) cancelAnimationFrame(pointerRafRef.current);
+    },
+    []
+  );
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -269,6 +290,83 @@ export const WaveformPage: React.FC = () => {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  const scrollXRef = useRef(scrollX);
+  scrollXRef.current = scrollX;
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.button !== 0 && e.button !== 2) return;
+    e.preventDefault();
+    if (pointerRafRef.current !== null) {
+      cancelAnimationFrame(pointerRafRef.current);
+      pointerRafRef.current = null;
+    }
+    pendingLiftRef.current = null;
+    pendingEraseRef.current = null;
+    const svg = svgRef.current;
+    if (!svg) return;
+    svg.setPointerCapture(e.pointerId);
+    const { lx, ly } = viewportToLogical(svg, e.clientX, e.clientY);
+    const wx = scrollXRef.current + lx;
+    const wy = ly;
+    if (e.button === 0) {
+      const gx = snapLiftWorldX(wx);
+      setPolyWorld((prev) => liftPolylineAtX(prev, gx, wy));
+    } else {
+      setPolyWorld((prev) => applyPolyEraser(prev, wx, wy));
+    }
+  }, []);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const { lx, ly } = viewportToLogical(svg, e.clientX, e.clientY);
+    const wx = scrollXRef.current + lx;
+    const wy = ly;
+    if (e.buttons & 1) {
+      e.preventDefault();
+      pendingLiftRef.current = { gx: snapLiftWorldX(wx), wy };
+      schedulePointerPolyFlush();
+    }
+    if (e.buttons & 2) {
+      e.preventDefault();
+      pendingEraseRef.current = { wx, wy };
+      schedulePointerPolyFlush();
+    }
+  }, [schedulePointerPolyFlush]);
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent<SVGSVGElement>) => {
+      if (pointerRafRef.current !== null) {
+        cancelAnimationFrame(pointerRafRef.current);
+        pointerRafRef.current = null;
+      }
+      flushPendingPointerPoly();
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* not captured */
+      }
+    },
+    [flushPendingPointerPoly]
+  );
+
+  const handlePointerCancel = useCallback(
+    (e: React.PointerEvent<SVGSVGElement>) => {
+      pendingLiftRef.current = null;
+      pendingEraseRef.current = null;
+      if (pointerRafRef.current !== null) {
+        cancelAnimationFrame(pointerRafRef.current);
+        pointerRafRef.current = null;
+      }
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* not captured */
+      }
+    },
+    []
+  );
 
   return (
     <div className="app-container">
@@ -291,10 +389,49 @@ export const WaveformPage: React.FC = () => {
         </label>
       </div>
       <div className="waveform-viewport device-viewport">
-        <canvas ref={canvasRef} className="waveform-canvas" width={VISIBLE_WIDTH} height={VISIBLE_HEIGHT} aria-label="Waveform demo" />
+        <svg
+          ref={svgRef}
+          className="waveform-svg waveform-svg--edit"
+          viewBox={`0 0 ${VISIBLE_WIDTH} ${VISIBLE_HEIGHT}`}
+          width={VISIBLE_WIDTH}
+          height={VISIBLE_HEIGHT}
+          role="img"
+          aria-label="Waveform demo"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+          onContextMenu={(ev) => ev.preventDefault()}
+        >
+          <rect className="waveform-svg__bg" x={0} y={0} width={VISIBLE_WIDTH} height={VISIBLE_HEIGHT} />
+          <g className="waveform-svg__bars">{barRects}</g>
+          {polyPointsAttr ? (
+            <>
+              {polylineOutline && (
+                <polyline
+                  className="waveform-svg__poly waveform-svg__poly--outline"
+                  fill="none"
+                  points={polyPointsAttr}
+                />
+              )}
+              <polyline
+                className="waveform-svg__poly waveform-svg__poly--main"
+                fill="none"
+                points={polyPointsAttr}
+              />
+            </>
+          ) : null}
+          <rect
+            className="waveform-svg__playhead"
+            x={CURSOR_X}
+            y={0}
+            width={2}
+            height={VISIBLE_HEIGHT}
+          />
+        </svg>
       </div>
       <div className="instructions">
-        Horizontal scroll: Arrow Left / Arrow Right ({SCROLL_STEP}px steps). Cyan line: playhead at viewport center.
+        Horizontal scroll: Arrow Left / Arrow Right ({SCROLL_STEP}px steps). Left mouse button: DRAW curve. Right drag: erase points.
       </div>
     </div>
   );

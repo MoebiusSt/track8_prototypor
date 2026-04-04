@@ -1,3 +1,54 @@
+/* Waveform viewport — tweak in DevTools (variables + classes on SVG children). */
+.waveform-svg {
+  --waveform-bg: var(--color-waveform-bg, #0d2818);
+  --waveform-bar: #7fff7f;
+  --waveform-poly-stroke: #ff8800;
+  --waveform-poly-outline-stroke: #000000;
+  --waveform-playhead: #7fffff;
+
+  display: block;
+  vertical-align: top;
+}
+
+.waveform-svg--edit {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.waveform-svg__bg {
+  fill: var(--waveform-bg);
+}
+
+.waveform-svg__bars {
+  shape-rendering: crispEdges;
+}
+
+.waveform-svg__bar {
+  fill: var(--waveform-bar);
+}
+
+.waveform-svg__poly {
+  shape-rendering: geometricPrecision;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  vector-effect: non-scaling-stroke;
+}
+
+.waveform-svg__poly--outline {
+  stroke: var(--waveform-poly-outline-stroke);
+  stroke-width: 3px;
+}
+
+.waveform-svg__poly--main {
+  stroke: var(--waveform-poly-stroke);
+  stroke-width: 1px;
+}
+
+.waveform-svg__playhead {
+  fill: var(--waveform-playhead);
+  shape-rendering: crispEdges;
+}
+
 .waveform-controls {
   display: flex;
   flex-wrap: wrap;
@@ -18,9 +69,5 @@
 }
 
 .waveform-viewport {
-  display: block;
-}
-
-.waveform-canvas {
   display: block;
 }
