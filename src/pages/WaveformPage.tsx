@@ -25,6 +25,11 @@ const LIFT_GRID_X = 2;
 /** Right-drag eraser radius (px, world). */
 const ERASER_RADIUS_PX = 26;
 
+/** Defaults match `waveform.css` (overridden live via SVG inline custom properties). */
+const DEFAULT_COLOR_WAVEFORM_BG = '#0d2818';
+const DEFAULT_COLOR_WAVEFORM_BAR = '#61ff53';
+const DEFAULT_COLOR_WAVEFORM_POLY = '#ff8800';
+
 type PolylineRenderMode = 'plain' | 'blackOutline' | 'multiplyHalo';
 
 const POLYLINE_MODE_SVG_CLASS: Record<PolylineRenderMode, string> = {
@@ -210,6 +215,9 @@ export const WaveformPage: React.FC = () => {
 
   const [scrollX, setScrollX] = useState(0);
   const [polylineMode, setPolylineMode] = useState<PolylineRenderMode>('plain');
+  const [colorBackground, setColorBackground] = useState(DEFAULT_COLOR_WAVEFORM_BG);
+  const [colorBars, setColorBars] = useState(DEFAULT_COLOR_WAVEFORM_BAR);
+  const [colorPolyline, setColorPolyline] = useState(DEFAULT_COLOR_WAVEFORM_POLY);
   const [polyWorld, setPolyWorld] = useState<{ x: number; y: number }[]>(() =>
     generatePolylineWorld(CONTENT_WIDTH, VISIBLE_HEIGHT)
   );
@@ -258,6 +266,16 @@ export const WaveformPage: React.FC = () => {
     if (polyWorld.length < 2) return '';
     return polyWorld.map((p) => `${p.x - scrollX},${p.y}`).join(' ');
   }, [polyWorld, scrollX]);
+
+  const svgColorVars = useMemo(
+    () =>
+      ({
+        '--waveform-bg': colorBackground,
+        '--waveform-bar': colorBars,
+        '--waveform-poly-stroke': colorPolyline,
+      }) as React.CSSProperties,
+    [colorBackground, colorBars, colorPolyline]
+  );
 
   const flushPendingPointerPoly = useCallback(() => {
     const lift = pendingLiftRef.current;
@@ -398,11 +416,39 @@ export const WaveformPage: React.FC = () => {
             <option value="multiplyHalo">Multiply halo (2px + 8px)</option>
           </select>
         </label>
+        <label>
+          Background
+          <input
+            type="color"
+            value={colorBackground}
+            onChange={(ev) => setColorBackground(ev.target.value)}
+            aria-label="Waveform background color"
+          />
+        </label>
+        <label>
+          Bars
+          <input
+            type="color"
+            value={colorBars}
+            onChange={(ev) => setColorBars(ev.target.value)}
+            aria-label="Waveform bar color"
+          />
+        </label>
+        <label>
+          Polyline
+          <input
+            type="color"
+            value={colorPolyline}
+            onChange={(ev) => setColorPolyline(ev.target.value)}
+            aria-label="Waveform polyline color"
+          />
+        </label>
       </div>
       <div className="waveform-viewport device-viewport">
         <svg
           ref={svgRef}
           className={`waveform-svg waveform-svg--edit ${POLYLINE_MODE_SVG_CLASS[polylineMode]}`}
+          style={svgColorVars}
           viewBox={`0 0 ${VISIBLE_WIDTH} ${VISIBLE_HEIGHT}`}
           width={VISIBLE_WIDTH}
           height={VISIBLE_HEIGHT}
@@ -444,7 +490,7 @@ export const WaveformPage: React.FC = () => {
       <div className="snap-description waveform-mode-description">
         {polylineMode === 'plain' && (
           <p>
-            <strong>Nur Orange 1px:</strong> Eine orangefarbene Linie mit <code>1px</code> Strichbreite. Problem: optical mixing of colors in details smaller than human visual resolition (partitive mixing) of colors in the 2px raster of light green darkgreen background. Additionally problematic due to complementry colors (orange and green). 
+            <strong>Just Orange 1px:</strong> An orange line with <code>1px</code> line width. Problem: optical mixing of colours in details smaller than human visual resolution (partitive mixing of the orange pixel with 2px grid of light green and dark green background. This is further complicated by use of complementary colours (orange and green) = maximum dazzling contrast effect (German: Simultankontrast). 
           </p>
         )}
         {polylineMode === 'blackOutline' && (
@@ -454,7 +500,7 @@ export const WaveformPage: React.FC = () => {
         )}
         {polylineMode === 'multiplyHalo' && (
           <p>
-            <strong>Multiply-Outline-fatter:</strong> <code>2px</code> orange line, with <code>8px</code>-Outline below (<code>4px</code> each side). Color: = backgroundcolor in 60% translucency.
+            <strong>Outline-fatter-60%:</strong> <code>2px</code> orange line, with <code>8px</code>-Outline below (<code>4px</code> each side). Color: = backgroundcolor in 60% translucency.
           </p>
         )}
       </div>
