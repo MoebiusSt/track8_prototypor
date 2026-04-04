@@ -218,6 +218,8 @@ export const WaveformPage: React.FC = () => {
   const [colorBackground, setColorBackground] = useState(DEFAULT_COLOR_WAVEFORM_BG);
   const [colorBars, setColorBars] = useState(DEFAULT_COLOR_WAVEFORM_BAR);
   const [colorPolyline, setColorPolyline] = useState(DEFAULT_COLOR_WAVEFORM_POLY);
+  /** When on: bars = background picker; background = opaque 60% bar + 40% background (no transparency → stable toggle). */
+  const [invertBarBackground, setInvertBarBackground] = useState(false);
   const [polyWorld, setPolyWorld] = useState<{ x: number; y: number }[]>(() =>
     generatePolylineWorld(CONTENT_WIDTH, VISIBLE_HEIGHT)
   );
@@ -267,15 +269,19 @@ export const WaveformPage: React.FC = () => {
     return polyWorld.map((p) => `${p.x - scrollX},${p.y}`).join(' ');
   }, [polyWorld, scrollX]);
 
-  const svgColorVars = useMemo(
-    () =>
-      ({
-        '--waveform-bg': colorBackground,
-        '--waveform-bar': colorBars,
-        '--waveform-poly-stroke': colorPolyline,
-      }) as React.CSSProperties,
-    [colorBackground, colorBars, colorPolyline]
-  );
+  const svgColorVars = useMemo(() => {
+    // Opaque mix only (never `transparent`): avoids compositing with the page behind the SVG and
+    // non-idempotent “drift” when toggling invert repeatedly.
+    const bgResolved = invertBarBackground
+      ? `color-mix(in srgb, ${colorBars} 60%, ${colorBackground} 40%)`
+      : colorBackground;
+    const barResolved = invertBarBackground ? colorBackground : colorBars;
+    return {
+      '--waveform-bg': bgResolved,
+      '--waveform-bar': barResolved,
+      '--waveform-poly-stroke': colorPolyline,
+    } as React.CSSProperties;
+  }, [colorBackground, colorBars, colorPolyline, invertBarBackground]);
 
   const flushPendingPointerPoly = useCallback(() => {
     const lift = pendingLiftRef.current;
@@ -397,10 +403,10 @@ export const WaveformPage: React.FC = () => {
   return (
     <div className="app-container">
       <nav className="demo-nav" aria-label="Demo views">
-        <NavLink to="/" end className={({ isActive }) => `demo-nav-link${isActive ? ' demo-nav-link-active' : ''}`}>
+        <NavLink to="/piano" end className={({ isActive }) => `demo-nav-link${isActive ? ' demo-nav-link-active' : ''}`}>
           Piano roll
         </NavLink>
-        <NavLink to="/waveform" className={({ isActive }) => `demo-nav-link${isActive ? ' demo-nav-link-active' : ''}`}>
+        <NavLink to="/" end className={({ isActive }) => `demo-nav-link${isActive ? ' demo-nav-link-active' : ''}`}>
           Waveform
         </NavLink>
       </nav>
@@ -443,6 +449,18 @@ export const WaveformPage: React.FC = () => {
             aria-label="Waveform polyline color"
           />
         </label>
+        <button
+          type="button"
+          className={invertBarBackground ? 'active' : ''}
+          aria-pressed={invertBarBackground}
+          onClick={(ev) => {
+            setInvertBarBackground((v) => !v);
+            (ev.currentTarget as HTMLButtonElement).blur();
+          }}
+          title="Bars = background picker; background = color-mix 60% bar + 40% background (opaque, toggle-stable)"
+        >
+          Invert bar / background
+        </button>
       </div>
       <div className="waveform-viewport device-viewport">
         <svg
@@ -500,8 +518,7 @@ export const WaveformPage: React.FC = () => {
         )}
         {polylineMode === 'multiplyHalo' && (
           <p>
-            <strong>Outline-fatter-60%:</strong> <code>2px</code> orange line, with <code>8px</code>-Outline below (<code>4px</code> each side). Color: = backgroundcolor in 60% translucency.
-          </p>
+            <strong>Outline-fatter-60%:</strong> <code>2px</code> orange line, with <code>8px</code>-Outline below (<code>4px</code> each side) in backgroundcolor and 60% translucency. This even works when users use theme editor to inverse foreground and background colors, making background lighter and waveform bars darker!          </p>
         )}
       </div>
       <div className="instructions">

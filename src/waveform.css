@@ -61,7 +61,6 @@
 .waveform-svg--mode-multiply-halo .waveform-svg__poly--outline {
   stroke: color-mix(in srgb, var(--waveform-bg) 60%, transparent);
   stroke-width: 8px;
-  mix-blend-mode: multiply;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -116,6 +115,23 @@
   cursor: pointer;
   background-color: #222;
   vertical-align: middle;
+}
+
+.waveform-controls button {
+  background-color: #222;
+  color: #fff;
+  border: 1px solid #444;
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.waveform-controls button.active {
+  background-color: var(--color-note);
+  color: #000;
+  border-color: var(--color-note-border);
 }
 
 .waveform-viewport {
