@@ -499,9 +499,21 @@ export const TimedMutePage: React.FC = () => {
 
   const togglePreQueue = useCallback(
     (trackIndex: number) => {
-      const pre = stateRef.current.preQueue;
-      if (pre.has(trackIndex)) pre.delete(trackIndex);
-      else pre.add(trackIndex);
+      const s = stateRef.current;
+      // Cancel a committed pending entry first (shift re-pressed after arm release).
+      if (s.pending.has(trackIndex)) {
+        s.pending.delete(trackIndex);
+        rejectBlinkTracksRef.current.delete(trackIndex);
+        bumpUi();
+        return;
+      }
+      const pre = s.preQueue;
+      if (pre.has(trackIndex)) {
+        pre.delete(trackIndex);
+        rejectBlinkTracksRef.current.delete(trackIndex);
+      } else {
+        pre.add(trackIndex);
+      }
       bumpUi();
     },
     [bumpUi]
@@ -760,9 +772,9 @@ export const TimedMutePage: React.FC = () => {
       }
 
       const s = stateRef.current;
+      s.shiftDown = e.shiftKey;
 
       if (isShiftCode(e.code)) {
-        s.shiftDown = true;
         return;
       }
 
@@ -811,7 +823,7 @@ export const TimedMutePage: React.FC = () => {
             toggleMuteImmediate(trackIndex);
             return;
           }
-          if (s.syncInteractionMode === 'QUEUED' && s.shiftDown) {
+          if (s.syncInteractionMode === 'QUEUED') {
             togglePreQueue(trackIndex);
             return;
           }
@@ -827,7 +839,7 @@ export const TimedMutePage: React.FC = () => {
     const onKeyUp = (e: KeyboardEvent) => {
       if (!isShiftCode(e.code)) return;
       const s = stateRef.current;
-      s.shiftDown = false;
+      s.shiftDown = e.shiftKey;
       if (s.syncMuteMode !== 'OFF' && s.syncInteractionMode === 'QUEUED') {
         commitPreQueueToPending();
       }
@@ -1052,13 +1064,27 @@ export const TimedMutePage: React.FC = () => {
         let lab = muted ? COLOR_LABEL_MUTED : COLOR_LABEL_UNMUTED;
 
         const inRejectBlinkNum = rejectActive && rejectBlinkTracksRef.current.has(tr);
-        const numberQueuedBlink =
-          s.syncInteractionMode === 'QUEUED' && s.shiftDown && preQ && blinkPhase;
+        const queuedArmed = s.syncInteractionMode === 'QUEUED' && s.shiftDown && preQ;
         const numberPendingBlink =
           pending && (s.syncInteractionMode === 'SIMPLE' || !s.shiftDown) && blinkPhase;
-        const numberRejectBlink = inRejectBlinkNum && rejectPhase;
 
-        if (numberQueuedBlink || numberPendingBlink || numberRejectBlink) {
+        if (inRejectBlinkNum) {
+          lab = muted
+            ? rejectPhase
+              ? '#ffb84a'
+              : COLOR_LABEL_MUTED
+            : rejectPhase
+              ? '#fff4dd'
+              : COLOR_LABEL_UNMUTED;
+        } else if (queuedArmed) {
+          lab = muted
+            ? blinkPhase
+              ? '#ffb84a'
+              : COLOR_LABEL_MUTED
+            : blinkPhase
+              ? '#886020'
+              : COLOR_LABEL_UNMUTED;
+        } else if (numberPendingBlink) {
           lab = muted ? '#443010' : '#886020';
         }
 
