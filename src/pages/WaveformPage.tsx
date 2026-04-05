@@ -447,6 +447,13 @@ export const WaveformPage: React.FC = () => {
         <NavLink to="/" end className={({ isActive }) => `demo-nav-link${isActive ? ' demo-nav-link-active' : ''}`}>
           Waveform
         </NavLink>
+        <NavLink
+          to="/timed-mute"
+          end
+          className={({ isActive }) => `demo-nav-link${isActive ? ' demo-nav-link-active' : ''}`}
+        >
+          Timed Mute
+        </NavLink>
       </nav>
       <div className="waveform-controls">
         <label>

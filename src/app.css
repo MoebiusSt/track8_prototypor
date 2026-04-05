@@ -88,6 +88,68 @@ body {
   border-color: var(--color-note-border);
 }
 
+.timed-mute-controls .timed-mute-btn-play {
+  min-width: 88px;
+  font-weight: 600;
+}
+
+.timed-mute-sync-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.timed-mute-controls .timed-mute-btn-sync {
+  min-width: 200px;
+}
+
+.timed-mute-sync-menu {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin: 4px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  min-width: 100%;
+  background-color: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  z-index: 50;
+}
+
+.timed-mute-sync-menu__item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: #eee;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.timed-mute-sync-menu__item:hover,
+.timed-mute-sync-menu__item:focus {
+  background-color: #2a2a2a;
+  outline: none;
+}
+
+.timed-mute-sync-menu__item.active {
+  color: var(--color-note);
+  font-weight: 600;
+}
+
+.timed-mute-controls .timed-mute-btn-sync-mode:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.timed-mute-canvas {
+  display: block;
+  vertical-align: top;
+}
+
 .piano-roll-viewport {
   background-color: var(--color-bg-dark);
 }
@@ -170,7 +232,8 @@ body {
 
 .instructions {
   color: #888;
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 120%;
 }
 
 .snap-description {
@@ -224,6 +287,8 @@ body {
   font-family: "Consolas", "Courier New", monospace;
   white-space: pre;
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: min(60vh, 560px);
   margin: 0;
   border-top: 1px solid #2a2a2a;
 }
