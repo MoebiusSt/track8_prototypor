@@ -1256,11 +1256,13 @@ OnImmediateMuteToggle(k):
   if syncMuteMode == OFF: muted[k] ^= 1
 
 OnSyncAction(k):
-  if pending[k] exists:          // second press = cancel
+  if QUEUED and SyncArmActive:           // arm held: collect or cancel phase
+    if pending[k] exists:                // cancel a previously committed entry
+      remove pending[k]; return
+    toggle preQueue[k]; return           // add or remove from arm set
+  if pending[k] exists:                  // second press = cancel (SIMPLE, or QUEUED arm released)
     remove pending[k]; return
-  if QUEUED and SyncArmActive:   // collect phase
-    toggle preQueue[k]; return
-  tryScheduleSingle(k)           // SIMPLE, or QUEUED without arm
+  tryScheduleSingle(k)                   // SIMPLE, or QUEUED without arm
 
 tryScheduleSingle(k):
   b = nextEligibleBoundary(transportNow, syncMuteMode, userMarkers)
@@ -1339,6 +1341,7 @@ stateDiagram-v2
   Idle --> Pending : SyncAction(k) / trySchedule → OK
   Idle --> PreQueued : SyncAction(k) / QUEUED+arm held
   Pending --> Idle : SyncAction(k) again → cancel
+  Pending --> Idle : SyncAction(k) / QUEUED+arm held → cancel
   Pending --> Idle : OnTransportTick boundary reached → apply muted[k]
   PreQueued --> Idle : SyncAction(k) again → dequeue
   PreQueued --> Pending : SyncArmReleased → commitBatch → OK
@@ -1348,14 +1351,16 @@ stateDiagram-v2
 ── Decision tree: OnSyncAction(k) ───────────────────────────────────────────
 
 flowchart TD
-  A([SyncAction k]) --> B{pending k\\nexists?}
-  B -- yes --> C[Cancel: remove pending k]
-  B -- no --> D{QUEUED and\\nSyncArmActive?}
-  D -- yes --> E[Toggle preQueue k]
-  D -- no --> F[tryScheduleSingle k]
-  F --> G{nextEligibleBoundary\\nreturns DENY?}
-  G -- yes --> H[rejectBlink track k\\nno pending set]
-  G -- no --> I[Set pending k\\nboundary + applyTime]
+  A([SyncAction k]) --> B{QUEUED and\\nSyncArmActive?}
+  B -- yes --> C{pending k\\nexists?}
+  C -- yes --> D[Cancel: remove pending k]
+  C -- no --> E[Toggle preQueue k]
+  B -- no --> F{pending k\\nexists?}
+  F -- yes --> G[Cancel: remove pending k]
+  F -- no --> H[tryScheduleSingle k]
+  H --> I{nextEligibleBoundary\\nreturns DENY?}
+  I -- yes --> J[rejectBlink track k\\nno pending set]
+  I -- no --> K[Set pending k\\nboundary + applyTime]
 `}</pre>
       </details>
     </div>
