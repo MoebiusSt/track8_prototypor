@@ -50,6 +50,8 @@ const COLOR_TICK_BAR = '#9ec8d8';
 const COLOR_LABEL_UNMUTED = '#ffaa00';
 const COLOR_LABEL_MUTED = '#664400';
 const COLOR_CMD_TEXT = '#ffa034';
+/** Canvas 2D font for CMD bar, encoder labels, and bottom bar time readout */
+const CANVAS_FONT_MONOGRAM_24 = '24px Monogram, monospace';
 const COLOR_BOTTOM_SQUARE = '#664400';
 const COLOR_BOTTOM_SQUARE_FILLED = '#ffaa00';
 const BLINK_HZ = 4;
@@ -2457,7 +2459,7 @@ export const MainOverviewPage: React.FC = () => {
 
       if (s.shiftDown && isClipMode) {
         // Clipboard mode + SHIFT: show track numbers with selection colors
-        ctx2d.font = '20px Monogram, monospace';
+        ctx2d.font = CANVAS_FONT_MONOGRAM_24;
         ctx2d.textAlign = 'center';
         for (let tr = 0; tr < TRACK_COUNT; tr++) {
           const cx = ((tr + 0.5) / TRACK_COUNT) * w;
@@ -2467,7 +2469,7 @@ export const MainOverviewPage: React.FC = () => {
         }
       } else if (s.shiftDown && !isClipMode) {
         // Song mode + SHIFT: show track numbers with mute-state colors
-        ctx2d.font = '20px Monogram, monospace';
+        ctx2d.font = CANVAS_FONT_MONOGRAM_24;
         ctx2d.textAlign = 'center';
         for (let tr = 0; tr < TRACK_COUNT; tr++) {
           const cx = ((tr + 0.5) / TRACK_COUNT) * w;
@@ -2513,13 +2515,13 @@ export const MainOverviewPage: React.FC = () => {
         const bStr = `B ${bar.toString().padStart(2, '0')}:${beat.toString().padStart(2, '0')}`;
 
         ctx2d.fillStyle = COLOR_CMD_TEXT;
-        ctx2d.font = '20px Monogram, monospace';
+        ctx2d.font = CANVAS_FONT_MONOGRAM_24;
         ctx2d.textAlign = 'center';
         ctx2d.fillText(tStr, 480, barMidY);
         ctx2d.fillText(bStr, 680, barMidY);
 
         // Mode label bottom-left: orange "CLIPBOARD" vs "AUDIO"
-        ctx2d.font = '20px Monogram, monospace';
+        ctx2d.font = CANVAS_FONT_MONOGRAM_24;
         ctx2d.textAlign = 'left';
         ctx2d.fillStyle = '#ffaa00';
         ctx2d.fillText(isClipMode ? 'CLIPBOARD' : 'AUDIO', 8, barMidY);
@@ -2527,7 +2529,7 @@ export const MainOverviewPage: React.FC = () => {
 
       // ── CMD bar text (drawn last, stays on top) ──────────────────────────
       ctx2d.fillStyle = COLOR_CMD_TEXT;
-      ctx2d.font = '20px Monogram, monospace';
+      ctx2d.font = CANVAS_FONT_MONOGRAM_24;
       ctx2d.textBaseline = 'middle';
       const cmdMidY = CMD_BAR_H / 2;
       ctx2d.textAlign = 'center';
