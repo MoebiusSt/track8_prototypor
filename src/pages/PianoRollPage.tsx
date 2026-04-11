@@ -603,10 +603,13 @@ export const PianoRollPage: React.FC = () => {
   return (
     <div className="app-container">
       <nav className="demo-nav" aria-label="Demo views">
+        <NavLink to="/overview" end className={({ isActive }) => `demo-nav-link${isActive ? ' demo-nav-link-active' : ''}`}>
+          Main Overview
+        </NavLink>
         <NavLink to="/piano" end className={({ isActive }) => `demo-nav-link${isActive ? ' demo-nav-link-active' : ''}`}>
           Piano roll
         </NavLink>
-        <NavLink to="/" end className={({ isActive }) => `demo-nav-link${isActive ? ' demo-nav-link-active' : ''}`}>
+        <NavLink to="/waveform" end className={({ isActive }) => `demo-nav-link${isActive ? ' demo-nav-link-active' : ''}`}>
           Waveform
         </NavLink>
         <NavLink

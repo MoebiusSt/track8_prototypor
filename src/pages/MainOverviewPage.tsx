@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { VISIBLE_HEIGHT, VISIBLE_WIDTH } from '../viewportConstants';
 import '../app.css';
+import '../theme/fonts.css';
 
-/** Vite-resolved URLs for eight MP3 stems. */
 const TRACK_URLS: string[] = Array.from({ length: 8 }, (_, i) =>
   new URL(`../assets/fonts/audio/track${i + 1}.mp3`, import.meta.url).href
 );
@@ -11,53 +11,71 @@ const TRACK_URLS: string[] = Array.from({ length: 8 }, (_, i) =>
 const BPM = 120;
 const BEATS_PER_BAR = 4;
 const PIXELS_PER_BEAT = 40;
-const PIXELS_PER_SECOND = (BPM / 60) * PIXELS_PER_BEAT; // 80
+const PIXELS_PER_SECOND = (BPM / 60) * PIXELS_PER_BEAT; // 80 px/s
 const SONG_DURATION_SEC = 70;
-const SONG_WORLD_WIDTH = Math.round(SONG_DURATION_SEC * PIXELS_PER_SECOND); // 5600
+const SONG_WORLD_WIDTH = Math.round(SONG_DURATION_SEC * PIXELS_PER_SECOND);
 const BAR_PITCH = 4;
 const COLUMN_COUNT = Math.floor(SONG_WORLD_WIDTH / BAR_PITCH);
 const CURSOR_X = Math.floor(VISIBLE_WIDTH / 2);
 
-const TIMELINE_H = 20;
-const TRACK_H = 44;
-const LABELS_H = 28;
+// Layout zones (total: 400px)
+const CMD_BAR_H = 25;   // top command bar
+const GRID_H = 24;      // time-division grid (beat/bar ticks)
+const BOTTOM_BAR_H = 26; // bottom status bar
 const TRACK_COUNT = 8;
+const TRACK_H = Math.floor((VISIBLE_HEIGHT - CMD_BAR_H - GRID_H - BOTTOM_BAR_H) / TRACK_COUNT); // 40
+const TRACKS_Y0 = CMD_BAR_H + GRID_H; // 49
+const BOTTOM_BAR_Y = VISIBLE_HEIGHT - BOTTOM_BAR_H; // 374
 
 const COLOR_LANE_BG = '#0d2818';
-const COLOR_WAVE_NORMAL = '#dff1ff'; /** c8d8f0 */
-const COLOR_WAVE_SELECTED = '#5aff5a';
-const COLOR_WAVE_MUTED = '#3a4a60';
-const COLOR_WAVE_MUTED_SEL = '#2a5a2a';
+const COLOR_CMD_BAR_BG = '#061208';
+const COLOR_WAVE_NORMAL = '#f8f8f2';
+const COLOR_WAVE_SELECTED = '#a6e22e';
+const COLOR_WAVE_MUTED = '#75715e';
+const COLOR_WAVE_MUTED_SEL = '#668c1c';
 const COLOR_CURSOR = '#7fffff';
-/** Upcoming synced mute/unmute marker (vertical line in track lanes); tweak independently of playhead. */
 const COLOR_SYNC_UPCOMING_MARKER = '#ffaa00';
 const COLOR_TRIANGLE = '#ffa034';
 const COLOR_TICK_BEAT = '#6a9aaa';
 const COLOR_TICK_BAR = '#9ec8d8';
 const COLOR_LABEL_UNMUTED = '#ffaa00';
 const COLOR_LABEL_MUTED = '#664400';
+const COLOR_CMD_TEXT = '#ffa034';
+const COLOR_BOTTOM_SQUARE = '#664400';
 const BLINK_HZ = 4;
 const REJECT_BLINK_HZ = 11;
 const TIMELINE_DRAG_THRESHOLD_PX = 6;
 
+type StepDivision = '4/1' | '2/1' | '1/1' | '1/2' | '1/4' | '1/8' | '1/16' | '1/32' | '1/64';
+const STEP_DIVISIONS: StepDivision[] = [
+  '4/1', '2/1', '1/1', '1/2', '1/4', '1/8', '1/16', '1/32', '1/64',
+];
+
+// Keep full union types so sync-logic helpers remain type-safe
 type SyncMuteMode = 'OFF' | 'BEAT' | 'BAR' | 'BARS4' | 'BARS8' | 'MARKER';
 type SyncInteractionMode = 'SIMPLE' | 'QUEUED';
 
-const SYNC_MUTE_OPTIONS: { value: SyncMuteMode; label: string }[] = [
-  { value: 'OFF', label: 'OFF' },
-  { value: 'BEAT', label: 'BEAT' },
-  { value: 'BAR', label: 'BAR' },
-  { value: 'BARS4', label: '4 BARS' },
-  { value: 'BARS8', label: '8 BARS' },
-  { value: 'MARKER', label: 'MARKER' },
-];
+// ---------------------------------------------------------------------------
+// Pure helpers
+// ---------------------------------------------------------------------------
 
-function beatDurationSec(): number {
-  return 60 / BPM;
+function beatDurationSec(): number { return 60 / BPM; }
+function barDurationSec(): number { return beatDurationSec() * BEATS_PER_BAR; }
+
+function stepDivisionToSec(div: StepDivision): number {
+  const b = barDurationSec();
+  const map: Record<StepDivision, number> = {
+    '4/1': b * 4, '2/1': b * 2, '1/1': b,
+    '1/2': b / 2, '1/4': b / 4, '1/8': b / 8,
+    '1/16': b / 16, '1/32': b / 32, '1/64': b / 64,
+  };
+  return map[div];
 }
 
-function barDurationSec(): number {
-  return beatDurationSec() * BEATS_PER_BAR;
+function snapToStepDivision(t: number, div: StepDivision): number {
+  const step = stepDivisionToSec(div);
+  const s = Math.round(t / step) * step;
+  return Math.min(Math.max(0, s), SONG_DURATION_SEC - 1e-6);
 }
 
 function nextSyncBoundarySongSec(currentSongSec: number, mode: SyncMuteMode): number {
@@ -65,19 +83,25 @@ function nextSyncBoundarySongSec(currentSongSec: number, mode: SyncMuteMode): nu
   const beatDur = beatDurationSec();
   const barDur = barDurationSec();
   const divisor =
-    mode === 'BEAT'
-      ? beatDur
-      : mode === 'BAR'
-        ? barDur
-        : mode === 'BARS4'
-          ? barDur * 4
-          : barDur * 8;
+    mode === 'BEAT' ? beatDur :
+    mode === 'BAR'  ? barDur :
+    mode === 'BARS4' ? barDur * 4 : barDur * 8;
   const n = Math.ceil((currentSongSec + 1e-6) / divisor) * divisor;
-  if (n >= SONG_DURATION_SEC - 1e-9) return SONG_DURATION_SEC;
-  return n;
+  return n >= SONG_DURATION_SEC - 1e-9 ? SONG_DURATION_SEC : n;
 }
 
-/** Wall-clock delta until next sync boundary from current song time (no safety margin). */
+function stepToNextMarkerLinear(
+  pos: number,
+  sorted: number[]
+): { target: number; delta: number } | null {
+  const eps = 1e-6;
+  for (const m of sorted) {
+    if (m > pos + eps && m < SONG_DURATION_SEC - eps)
+      return { target: m, delta: m - pos };
+  }
+  return null;
+}
+
 function deltaSecToNextBoundary(
   songNow: number,
   mode: SyncMuteMode,
@@ -87,15 +111,11 @@ function deltaSecToNextBoundary(
   if (mode === 'MARKER') {
     const markers = sortedMarkers.length > 0 ? sortedMarkers : [0];
     const step = stepToNextMarkerLinear(songNow, markers);
-    if (step === null) return Infinity;
-    return Math.max(1e-4, step.delta);
+    return step === null ? Infinity : Math.max(1e-4, step.delta);
   }
   let b = nextSyncBoundarySongSec(songNow, mode);
   let d = b - songNow;
-  if (d <= 1e-5) {
-    b = nextSyncBoundarySongSec(songNow + 1e-3, mode);
-    d = b - songNow;
-  }
+  if (d <= 1e-5) { b = nextSyncBoundarySongSec(songNow + 1e-3, mode); d = b - songNow; }
   return Math.max(1e-4, d);
 }
 
@@ -105,41 +125,12 @@ function getAllMarkersSorted(userMarkerSongSec: number[]): number[] {
   return Array.from(set).sort((a, b) => a - b);
 }
 
-function snapSongSecToBeat(t: number): number {
-  const beatDur = beatDurationSec();
-  const s = Math.round(t / beatDur) * beatDur;
-  return Math.min(Math.max(0, s), SONG_DURATION_SEC - 1e-6);
-}
-
-/**
- * Next marker strictly after `pos` before song end (no loop wrap). Used for MARKER sync scheduling.
- */
-function stepToNextMarkerLinear(
-  pos: number,
-  sorted: number[]
-): { target: number; delta: number } | null {
-  const eps = 1e-6;
-  for (const m of sorted) {
-    if (m > pos + eps && m < SONG_DURATION_SEC - eps) {
-      return { target: m, delta: m - pos };
-    }
-  }
-  return null;
-}
-
-/**
- * Next sync event must be at least one full beat away along the looped timeline (blocks sub-beat windows).
- * MARKER mode: walks markers strictly forward in song time (no wrap to next loop). Returns null if no marker
- * ahead with at least one beat lead before file end.
- */
 function computeSafeSyncApply(
   songNow: number,
   mode: SyncMuteMode,
   sortedMarkers: number[]
 ): { deltaPlayback: number; boundarySongSec: number } | null {
-  if (mode === 'OFF') {
-    return { deltaPlayback: Infinity, boundarySongSec: songNow };
-  }
+  if (mode === 'OFF') return { deltaPlayback: Infinity, boundarySongSec: songNow };
   if (mode === 'MARKER') {
     const markers = sortedMarkers.length > 0 ? sortedMarkers : [0];
     const minLead = beatDurationSec();
@@ -147,21 +138,16 @@ function computeSafeSyncApply(
     let total = 0;
     for (let i = 0; i < 256; i++) {
       const step = stepToNextMarkerLinear(pos, markers);
-      if (step === null) {
-        return null;
-      }
+      if (step === null) return null;
       const { target, delta } = step;
       if (delta <= 1e-12) return null;
       total += delta;
       if (total >= minLead - 1e-6) {
-        const boundarySongSec =
-          target >= SONG_DURATION_SEC - 1e-9 ? SONG_DURATION_SEC : target;
+        const boundarySongSec = target >= SONG_DURATION_SEC - 1e-9 ? SONG_DURATION_SEC : target;
         return { deltaPlayback: total, boundarySongSec };
       }
       pos = target + 1e-3;
-      if (pos >= SONG_DURATION_SEC - 1e-9) {
-        return null;
-      }
+      if (pos >= SONG_DURATION_SEC - 1e-9) return null;
     }
     return null;
   }
@@ -171,10 +157,7 @@ function computeSafeSyncApply(
   for (let i = 0; i < 256; i++) {
     let b = nextSyncBoundarySongSec(pos, mode);
     let d = b - pos;
-    if (d <= 1e-6) {
-      b = nextSyncBoundarySongSec(pos + 1e-3, mode);
-      d = b - pos;
-    }
+    if (d <= 1e-6) { b = nextSyncBoundarySongSec(pos + 1e-3, mode); d = b - pos; }
     total += d;
     if (total >= minLead - 1e-6) {
       const boundarySongSec = b >= SONG_DURATION_SEC - 1e-9 ? SONG_DURATION_SEC : b;
@@ -185,10 +168,7 @@ function computeSafeSyncApply(
   }
   const fallback = deltaSecToNextBoundary(songNow, mode, sortedMarkers);
   const fb = nextSyncBoundarySongSec(songNow, mode);
-  return {
-    deltaPlayback: fallback,
-    boundarySongSec: fb >= SONG_DURATION_SEC - 1e-9 ? SONG_DURATION_SEC : fb,
-  };
+  return { deltaPlayback: fallback, boundarySongSec: fb >= SONG_DURATION_SEC - 1e-9 ? SONG_DURATION_SEC : fb };
 }
 
 function viewportClientXToLogical(canvas: HTMLCanvasElement, clientX: number): number {
@@ -220,7 +200,6 @@ function hitTestTimelineMarker(
   return { hit: 'none' };
 }
 
-/** Playback seconds along the looped timeline from `fromSongSec` until `boundarySongSec` is reached. */
 function playbackSecondsToBoundary(fromSongSec: number, boundarySongSec: number): number {
   const eps = 1e-6;
   if (boundarySongSec >= SONG_DURATION_SEC - eps) {
@@ -249,7 +228,14 @@ function computeAmplitudes(buffer: AudioBuffer, columns: number): number[] {
   return out;
 }
 
-/** One queued sync mute: fixed musical boundary; wall-clock apply time set while transport runs. */
+function isShiftCode(code: string): boolean {
+  return code === 'ShiftLeft' || code === 'ShiftRight';
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 interface PendingSyncEntry {
   targetMuted: boolean;
   boundarySongSec: number;
@@ -261,22 +247,21 @@ interface DrawState {
   playing: boolean;
   muted: boolean[];
   selectedTrack: number;
-  preQueue: Set<number>;
   pending: Map<number, PendingSyncEntry>;
   syncMuteMode: SyncMuteMode;
   syncInteractionMode: SyncInteractionMode;
   shiftDown: boolean;
-  /** User-placed timeline markers (song sec, beat-snapped); fixed marker at 0 is implicit. */
   userMarkerSongSec: number[];
   amplitudes: number[][] | null;
   loadError: string | null;
+  stepDivision: StepDivision;
 }
 
-function isShiftCode(code: string): boolean {
-  return code === 'ShiftLeft' || code === 'ShiftRight';
-}
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
-export const TimedMutePage: React.FC = () => {
+export const MainOverviewPage: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const buffersRef = useRef<AudioBuffer[] | null>(null);
@@ -289,28 +274,25 @@ export const TimedMutePage: React.FC = () => {
   const stateRef = useRef<DrawState>({
     songSec: 0,
     playing: false,
-    /** Tracks 1–8: default muted 1,4,5,7,8 (indices 0,3,4,6,7); audible 2,3,6. */
+    // Tracks 1–8: default muted 1,4,5,7,8 (indices 0,3,4,6,7); audible 2,3,6
     muted: [true, false, false, true, true, false, true, true],
     selectedTrack: 0,
-    preQueue: new Set(),
     pending: new Map(),
-    syncMuteMode: 'OFF',
-    syncInteractionMode: 'SIMPLE',
+    syncMuteMode: 'BAR',      // fixed for this view
+    syncInteractionMode: 'SIMPLE', // fixed for this view
     shiftDown: false,
     userMarkerSongSec: [],
     amplitudes: null,
     loadError: null,
+    stepDivision: '1/64',
   });
 
   const [uiTick, setUiTick] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
-  const [syncMenuOpen, setSyncMenuOpen] = useState(false);
-  const syncMuteArmRef = useRef(false);
-  const syncMuteWrapRef = useRef<HTMLDivElement | null>(null);
-  /** Reject blink: rapid flash when sync cannot be scheduled (MARKER mode). */
+
   const rejectBlinkEndMsRef = useRef(0);
   const rejectBlinkTracksRef = useRef<Set<number>>(new Set());
-  /** Timeline drag ghost song sec (beat-snapped); read in rAF. */
+
   const markerDragGhostSecRef = useRef<number | null>(null);
   const markerDragSourceSecRef = useRef<number | null>(null);
   const timelinePointerRef = useRef<{
@@ -345,18 +327,13 @@ export const TimedMutePage: React.FC = () => {
     return pos;
   }, []);
 
-  const scrollXFromSongSec = (songSec: number): number =>
-    songSec * PIXELS_PER_SECOND - CURSOR_X;
+  const scrollXFromSongSec = (sec: number): number => sec * PIXELS_PER_SECOND - CURSOR_X;
 
   const stopAllSources = useCallback(() => {
     const srcs = sourcesRef.current;
     if (!srcs) return;
     for (const src of srcs) {
-      try {
-        src.stop();
-      } catch {
-        /* already stopped */
-      }
+      try { src.stop(); } catch { /* already stopped */ }
     }
     sourcesRef.current = null;
   }, []);
@@ -370,7 +347,6 @@ export const TimedMutePage: React.FC = () => {
     g.value = muted ? 0 : 1;
   }, []);
 
-  /** Set each pending entry's `applyAtAudioTime` from its stored boundary and current song position. */
   const hydratePendingApplyTimes = useCallback(() => {
     const ctx = audioCtxRef.current;
     const s = stateRef.current;
@@ -382,23 +358,15 @@ export const TimedMutePage: React.FC = () => {
     }
   }, [getSongSecNow]);
 
-  const clearPendingApplyTimesOnPause = useCallback(() => {
-    for (const entry of stateRef.current.pending.values()) {
-      entry.applyAtAudioTime = null;
-    }
-  }, []);
-
   const startPlayback = useCallback(() => {
     const ctx = audioCtxRef.current;
     const buffers = buffersRef.current;
     const gains = gainNodesRef.current;
     if (!ctx || !buffers || !gains) return;
-
     stopAllSources();
     const startSong = stateRef.current.songSec;
     const when = ctx.currentTime;
     const srcs: AudioBufferSourceNode[] = [];
-
     for (let i = 0; i < TRACK_COUNT; i++) {
       const buf = buffers[i];
       if (!buf) continue;
@@ -406,15 +374,10 @@ export const TimedMutePage: React.FC = () => {
       src.buffer = buf;
       src.loop = true;
       src.loopStart = 0;
-      const loopEnd = Math.min(SONG_DURATION_SEC, buf.duration);
-      src.loopEnd = loopEnd;
+      src.loopEnd = Math.min(SONG_DURATION_SEC, buf.duration);
       src.connect(gains[i]!);
       const offset = startSong % buf.duration;
-      try {
-        src.start(when, offset);
-      } catch {
-        src.start(when, 0);
-      }
+      try { src.start(when, offset); } catch { src.start(when, 0); }
       srcs.push(src);
     }
     sourcesRef.current = srcs;
@@ -431,9 +394,10 @@ export const TimedMutePage: React.FC = () => {
     stateRef.current.songSec = getSongSecNow();
     stateRef.current.playing = false;
     stopAllSources();
-    clearPendingApplyTimesOnPause();
+    // Clear all pending mute entries: stopped = immediate control, no scheduled cues.
+    stateRef.current.pending.clear();
     bumpUi();
-  }, [getSongSecNow, stopAllSources, clearPendingApplyTimesOnPause, bumpUi]);
+  }, [getSongSecNow, stopAllSources, bumpUi]);
 
   const toggleMuteImmediate = useCallback(
     (trackIndex: number) => {
@@ -462,8 +426,7 @@ export const TimedMutePage: React.FC = () => {
       }
       const { deltaPlayback, boundarySongSec } = applied;
       const ctx = audioCtxRef.current;
-      const applyAtAudioTime =
-        ctx && s.playing ? ctx.currentTime + deltaPlayback : null;
+      const applyAtAudioTime = ctx && s.playing ? ctx.currentTime + deltaPlayback : null;
       pending.set(trackIndex, {
         targetMuted: !s.muted[trackIndex],
         boundarySongSec,
@@ -474,51 +437,7 @@ export const TimedMutePage: React.FC = () => {
     [getSongSecNow, bumpUi, triggerRejectBlink]
   );
 
-  const commitPreQueueToPending = useCallback(() => {
-    const s = stateRef.current;
-    const pre = s.preQueue;
-    if (pre.size === 0) return;
-    const markers = getAllMarkersSorted(s.userMarkerSongSec);
-    const applied = computeSafeSyncApply(getSongSecNow(), s.syncMuteMode, markers);
-    if (applied === null) {
-      triggerRejectBlink(Array.from(pre));
-      return;
-    }
-    const { deltaPlayback, boundarySongSec } = applied;
-    const ctx = audioCtxRef.current;
-    const applyAtAudioTime =
-      ctx && s.playing ? ctx.currentTime + deltaPlayback : null;
-    const pending = s.pending;
-    for (const trackIndex of pre) {
-      const targetMuted = !s.muted[trackIndex];
-      pending.set(trackIndex, { targetMuted, boundarySongSec, applyAtAudioTime });
-    }
-    pre.clear();
-    bumpUi();
-  }, [getSongSecNow, bumpUi, triggerRejectBlink]);
-
-  const togglePreQueue = useCallback(
-    (trackIndex: number) => {
-      const s = stateRef.current;
-      // Cancel a committed pending entry first (shift re-pressed after arm release).
-      if (s.pending.has(trackIndex)) {
-        s.pending.delete(trackIndex);
-        rejectBlinkTracksRef.current.delete(trackIndex);
-        bumpUi();
-        return;
-      }
-      const pre = s.preQueue;
-      if (pre.has(trackIndex)) {
-        pre.delete(trackIndex);
-        rejectBlinkTracksRef.current.delete(trackIndex);
-      } else {
-        pre.add(trackIndex);
-      }
-      bumpUi();
-    },
-    [bumpUi]
-  );
-
+  // Timeline pointer: only active in GRID zone (y: CMD_BAR_H … TRACKS_Y0)
   const onTimelinePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (e.button !== 0) return;
@@ -526,7 +445,7 @@ export const TimedMutePage: React.FC = () => {
       if (!canvas) return;
       const r = canvas.getBoundingClientRect();
       const ly = ((e.clientY - r.top) / r.height) * VISIBLE_HEIGHT;
-      if (ly >= TIMELINE_H) return;
+      if (ly < CMD_BAR_H || ly >= TRACKS_Y0) return;
       const lx = viewportClientXToLogical(canvas, e.clientX);
       const songSec = getSongSecNow();
       const scrollX = scrollXFromSongSec(songSec);
@@ -573,7 +492,7 @@ export const TimedMutePage: React.FC = () => {
       const lx = viewportClientXToLogical(canvas, e.clientX);
       const scrollX = scrollXFromSongSec(getSongSecNow());
       const raw = logicalXToSongSec(scrollX, lx);
-      markerDragGhostSecRef.current = snapSongSecToBeat(raw);
+      markerDragGhostSecRef.current = snapToStepDivision(raw, stateRef.current.stepDivision);
     },
     [getSongSecNow]
   );
@@ -584,11 +503,7 @@ export const TimedMutePage: React.FC = () => {
       if (!st || st.pointerId !== e.pointerId) return;
       const canvas = canvasRef.current;
       if (canvas) {
-        try {
-          canvas.releasePointerCapture(e.pointerId);
-        } catch {
-          /* not captured */
-        }
+        try { canvas.releasePointerCapture(e.pointerId); } catch { /* not captured */ }
       }
       timelinePointerRef.current = null;
       const dist = Math.hypot(e.clientX - st.startClientX, e.clientY - st.startClientY);
@@ -634,7 +549,7 @@ export const TimedMutePage: React.FC = () => {
       }
       if (hit.hit === 'zero') return;
       const raw = logicalXToSongSec(scrollX, lx);
-      const snapped = snapSongSecToBeat(raw);
+      const snapped = snapToStepDivision(raw, stateRef.current.stepDivision);
       if (snapped <= 1e-4) return;
       const u = stateRef.current.userMarkerSongSec;
       if (u.some((t) => Math.abs(t - snapped) < 1e-4)) return;
@@ -644,6 +559,7 @@ export const TimedMutePage: React.FC = () => {
     [getSongSecNow, bumpUi]
   );
 
+  // Audio loading
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -670,10 +586,13 @@ export const TimedMutePage: React.FC = () => {
         bumpUi();
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [bumpUi]);
+
+  // Preload Monogram font so canvas can use it immediately
+  useEffect(() => {
+    void document.fonts.load('20px Monogram');
+  }, []);
 
   const ensureAudioGraph = useCallback(() => {
     if (audioCtxRef.current && gainNodesRef.current) return audioCtxRef.current;
@@ -701,69 +620,12 @@ export const TimedMutePage: React.FC = () => {
     }
   }, [audioReady, ensureAudioGraph, pausePlayback, startPlayback]);
 
-  const setSyncMuteMode = useCallback(
-    (mode: SyncMuteMode) => {
-      stateRef.current.syncMuteMode = mode;
-      if (mode === 'OFF') {
-        stateRef.current.pending.clear();
-        stateRef.current.preQueue.clear();
-      } else if (stateRef.current.playing) {
-        hydratePendingApplyTimes();
-      }
-      setSyncMenuOpen(false);
-      bumpUi();
-    },
-    [hydratePendingApplyTimes, bumpUi]
-  );
-
-  const onSyncMuteTriggerMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    if (syncMenuOpen) {
-      setSyncMenuOpen(false);
-      syncMuteArmRef.current = false;
-      return;
-    }
-    syncMuteArmRef.current = true;
-  }, [syncMenuOpen]);
-
-  const onSyncMuteTriggerMouseUp = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    if (e.button !== 0) return;
-    if (!syncMuteArmRef.current) return;
-    syncMuteArmRef.current = false;
-    setSyncMenuOpen(true);
-  }, []);
-
-  const onSyncMuteTriggerMouseLeave = useCallback(() => {
-    syncMuteArmRef.current = false;
-  }, []);
-
-  useEffect(() => {
-    if (!syncMenuOpen) return;
-    const onDocMouseDown = (ev: MouseEvent) => {
-      const el = syncMuteWrapRef.current;
-      if (el && !el.contains(ev.target as Node)) setSyncMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onDocMouseDown);
-    return () => document.removeEventListener('mousedown', onDocMouseDown);
-  }, [syncMenuOpen]);
-
-  const toggleSyncInteractionMode = useCallback(() => {
-    stateRef.current.syncInteractionMode =
-      stateRef.current.syncInteractionMode === 'SIMPLE' ? 'QUEUED' : 'SIMPLE';
-    bumpUi();
-  }, [bumpUi]);
-
+  // Keyboard input
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
       const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
-      ) {
-        return;
-      }
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
 
       if (e.code === 'Space') {
         e.preventDefault();
@@ -775,6 +637,8 @@ export const TimedMutePage: React.FC = () => {
       s.shiftDown = e.shiftKey;
 
       if (isShiftCode(e.code)) {
+        // bumpUi so bottom-bar switches to track-number display immediately
+        bumpUi();
         return;
       }
 
@@ -786,17 +650,14 @@ export const TimedMutePage: React.FC = () => {
             stopAllSources();
             anchorSongSecRef.current = 0;
             const ctx = audioCtxRef.current;
-            if (ctx) {
-              anchorAudioTimeRef.current = ctx.currentTime;
-              startPlayback();
-            }
+            if (ctx) { anchorAudioTimeRef.current = ctx.currentTime; startPlayback(); }
           }
           bumpUi();
           return;
         }
-        const deltaBar = barDurationSec();
+        const delta = stepDivisionToSec(s.stepDivision);
         const sign = e.key === 'ArrowLeft' ? -1 : 1;
-        let next = getSongSecNow() + sign * deltaBar;
+        let next = getSongSecNow() + sign * delta;
         while (next < 0) next += SONG_DURATION_SEC;
         while (next >= SONG_DURATION_SEC) next -= SONG_DURATION_SEC;
         s.songSec = next;
@@ -811,7 +672,8 @@ export const TimedMutePage: React.FC = () => {
         return;
       }
 
-      const digit = e.code >= 'Digit1' && e.code <= 'Digit8' ? parseInt(e.code.slice(5), 10) - 1 : -1;
+      const digit =
+        e.code >= 'Digit1' && e.code <= 'Digit8' ? parseInt(e.code.slice(5), 10) - 1 : -1;
       const numpad =
         e.code >= 'Numpad1' && e.code <= 'Numpad8' ? parseInt(e.code.slice(6), 10) - 1 : -1;
       const trackIndex = digit >= 0 ? digit : numpad;
@@ -819,12 +681,9 @@ export const TimedMutePage: React.FC = () => {
       if (trackIndex >= 0 && trackIndex < TRACK_COUNT) {
         if (e.shiftKey) {
           e.preventDefault();
-          if (s.syncMuteMode === 'OFF') {
+          // When song is stopped: always immediate mute (no cue, no blink, no marker)
+          if (s.syncMuteMode === 'OFF' || !s.playing) {
             toggleMuteImmediate(trackIndex);
-            return;
-          }
-          if (s.syncInteractionMode === 'QUEUED') {
-            togglePreQueue(trackIndex);
             return;
           }
           togglePendingOrCancel(trackIndex);
@@ -838,11 +697,8 @@ export const TimedMutePage: React.FC = () => {
 
     const onKeyUp = (e: KeyboardEvent) => {
       if (!isShiftCode(e.code)) return;
-      const s = stateRef.current;
-      s.shiftDown = e.shiftKey;
-      if (s.syncMuteMode !== 'OFF' && s.syncInteractionMode === 'QUEUED') {
-        commitPreQueueToPending();
-      }
+      stateRef.current.shiftDown = e.shiftKey;
+      bumpUi();
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -853,16 +709,15 @@ export const TimedMutePage: React.FC = () => {
     };
   }, [
     bumpUi,
-    commitPreQueueToPending,
     getSongSecNow,
+    handlePlayClick,
     startPlayback,
     stopAllSources,
     toggleMuteImmediate,
     togglePendingOrCancel,
-    togglePreQueue,
-    handlePlayClick,
   ]);
 
+  // rAF draw loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -884,10 +739,7 @@ export const TimedMutePage: React.FC = () => {
           const now = actx.currentTime;
           let anyApplied = false;
           for (const [trackIndex, entry] of [...s.pending]) {
-            if (
-              entry.applyAtAudioTime !== null &&
-              now + 1e-4 >= entry.applyAtAudioTime
-            ) {
+            if (entry.applyAtAudioTime !== null && now + 1e-4 >= entry.applyAtAudioTime) {
               s.muted[trackIndex] = entry.targetMuted;
               applyGainImmediate(trackIndex, entry.targetMuted);
               s.pending.delete(trackIndex);
@@ -900,7 +752,6 @@ export const TimedMutePage: React.FC = () => {
 
       const scrollX = scrollXFromSongSec(songSec);
       const w = VISIBLE_WIDTH;
-      const h = VISIBLE_HEIGHT;
       const nowPerf = performance.now();
       const blinkPhase = Math.floor((nowPerf / 1000) * BLINK_HZ) % 2 === 0;
       const rejectUntil = rejectBlinkEndMsRef.current;
@@ -910,15 +761,21 @@ export const TimedMutePage: React.FC = () => {
         rejectBlinkTracksRef.current.clear();
       }
 
+      // ── Background ──────────────────────────────────────────────────────
       ctx2d.fillStyle = COLOR_LANE_BG;
-      ctx2d.fillRect(0, 0, w, h);
+      ctx2d.fillRect(0, 0, w, VISIBLE_HEIGHT);
+
+      // ── CMD bar ─────────────────────────────────────────────────────────
+      ctx2d.fillStyle = COLOR_CMD_BAR_BG;
+      ctx2d.fillRect(0, 0, w, CMD_BAR_H);
+
+      // ── Grid area ───────────────────────────────────────────────────────
+      ctx2d.fillStyle = COLOR_CMD_BAR_BG;
+      ctx2d.fillRect(0, CMD_BAR_H, w, GRID_H);
 
       const beatDur = beatDurationSec();
       const firstBeat = Math.floor((scrollX / PIXELS_PER_SECOND) / beatDur);
       const lastBeat = Math.ceil(((scrollX + w) / PIXELS_PER_SECOND) / beatDur);
-
-      ctx2d.fillStyle = '#061208';
-      ctx2d.fillRect(0, 0, w, TIMELINE_H);
 
       for (let b = firstBeat; b <= lastBeat; b++) {
         const t = b * beatDur;
@@ -926,69 +783,83 @@ export const TimedMutePage: React.FC = () => {
         if (x < -2 || x > w + 2) continue;
         const isBar = b % BEATS_PER_BAR === 0;
         ctx2d.strokeStyle = isBar ? COLOR_TICK_BAR : COLOR_TICK_BEAT;
-        ctx2d.lineWidth = 1;
+        ctx2d.lineWidth = 2;
         ctx2d.beginPath();
-        ctx2d.moveTo(x + 0.5, isBar ? 2 : 8);
-        ctx2d.lineTo(x + 0.5, TIMELINE_H);
+        ctx2d.moveTo(x + 0.5, CMD_BAR_H + (isBar ? 2 : 8));
+        ctx2d.lineTo(x + 0.5, CMD_BAR_H + GRID_H);
         ctx2d.stroke();
       }
 
+      // ── Track lanes ─────────────────────────────────────────────────────
       const amps = s.amplitudes;
-
       for (let tr = 0; tr < TRACK_COUNT; tr++) {
-        const y0 = TIMELINE_H + tr * TRACK_H;
+        const y0 = TRACKS_Y0 + tr * TRACK_H;
         ctx2d.fillStyle = COLOR_LANE_BG;
         ctx2d.fillRect(0, y0, w, TRACK_H);
 
-        const centerY = y0 + TRACK_H / 2;
-        const maxHalf = Math.floor(TRACK_H / 2) - 3;
-        const x0 = 0;
-        const x1 = w;
+        const centerY = y0 + Math.floor(TRACK_H / 2);
+        // Centerline occupies ±2px around centerY; subtract that from usable amplitude space
+        const maxHalf = Math.floor(TRACK_H / 2) - 4;
+
+        // Track-level state (needed for both centerline and amplitude bars)
+        const muted = s.muted[tr]!;
+        const sel = s.selectedTrack === tr;
+        const hasPending = s.pending.has(tr);
+
+        // Base track color (reflects muted/selected state, no blink)
+        let baseColor = COLOR_WAVE_NORMAL;
+        if (sel && !muted) baseColor = COLOR_WAVE_SELECTED;
+        else if (sel && muted) baseColor = COLOR_WAVE_MUTED_SEL;
+        else if (muted) baseColor = COLOR_WAVE_MUTED;
+
+        // Blink state for bars (not applied to centerline)
+        const inRejectBlink = rejectActive && rejectBlinkTracksRef.current.has(tr);
+        const waveformBlink = hasPending || inRejectBlink;
+        const blinkUse = inRejectBlink ? rejectPhase : blinkPhase;
 
         if (amps?.[tr]) {
-          const colStart = Math.max(0, Math.floor((scrollX + x0) / BAR_PITCH));
-          const colEnd = Math.min(COLUMN_COUNT - 1, Math.ceil((scrollX + x1) / BAR_PITCH));
+          const colStart = Math.max(0, Math.floor(scrollX / BAR_PITCH));
+          const colEnd = Math.min(COLUMN_COUNT - 1, Math.ceil((scrollX + w) / BAR_PITCH));
           const barW = 2;
 
           for (let col = colStart; col <= colEnd; col++) {
             const sx = col * BAR_PITCH - scrollX;
-            if (sx + barW <= x0 || sx >= x1) continue;
+            if (sx + barW <= 0 || sx >= w) continue;
             const amp = amps[tr]![col] ?? 0.02;
             const hBar = Math.max(1, Math.min(maxHalf, Math.round(amp * maxHalf * 1.2)));
 
-            const muted = s.muted[tr]!;
-            const sel = s.selectedTrack === tr;
-            const pending = s.pending.has(tr);
-
-            let fill = COLOR_WAVE_NORMAL;
-            if (sel && !muted) fill = COLOR_WAVE_SELECTED;
-            else if (sel && muted) fill = COLOR_WAVE_MUTED_SEL;
-            else if (muted) fill = COLOR_WAVE_MUTED;
-
-            /* QUEUED + Shift held: only orange numbers blink (preQueue), not waveforms. */
-            const inRejectBlink = rejectActive && rejectBlinkTracksRef.current.has(tr);
-            const waveformBlink = pending || inRejectBlink;
-            const blinkUse = inRejectBlink ? rejectPhase : blinkPhase;
+            let fill = baseColor;
             if (waveformBlink && blinkUse) {
               fill =
-                fill === COLOR_WAVE_SELECTED
-                  ? COLOR_WAVE_MUTED_SEL
-                  : fill === COLOR_WAVE_NORMAL
-                    ? COLOR_WAVE_MUTED
-                    : fill === COLOR_WAVE_MUTED_SEL
-                      ? COLOR_WAVE_SELECTED
-                      : COLOR_WAVE_NORMAL;
+                fill === COLOR_WAVE_SELECTED ? COLOR_WAVE_MUTED_SEL :
+                fill === COLOR_WAVE_NORMAL   ? COLOR_WAVE_MUTED :
+                fill === COLOR_WAVE_MUTED_SEL ? COLOR_WAVE_SELECTED :
+                COLOR_WAVE_NORMAL;
             }
 
             ctx2d.fillStyle = fill;
-            ctx2d.fillRect(Math.floor(sx), centerY - hBar, barW, hBar);
-            ctx2d.fillRect(Math.floor(sx), centerY + 1, barW, hBar);
+            // Bars grow outward from the centerline edges (±2px)
+            ctx2d.fillRect(Math.floor(sx), centerY - 2 - hBar, barW, hBar);
+            ctx2d.fillRect(Math.floor(sx), centerY + 2, barW, hBar);
           }
         }
 
+        // Centerline drawn AFTER bars: always static baseColor, never blinks.
+        // 2×4px blocks, 2px gap, on the BAR_PITCH grid, covers full visible width
+        // including negative time (left of song start) as a visual track axis.
+        const clY = centerY - 2;
+        ctx2d.fillStyle = baseColor;
+        const clColStart = Math.floor(scrollX / BAR_PITCH) - 1;
+        const clColEnd = Math.ceil((scrollX + w) / BAR_PITCH) + 1;
+        for (let col = clColStart; col <= clColEnd; col++) {
+          const clX = Math.floor(col * BAR_PITCH - scrollX);
+          if (clX + 2 <= 0 || clX >= w) continue;
+          ctx2d.fillRect(clX, clY, 2, 4);
+        }
+
+        // Upcoming sync-mute marker line
         const pe = s.pending.get(tr);
-        const showUpcomingSyncMarker = s.syncMuteMode !== 'OFF' && pe !== undefined;
-        if (showUpcomingSyncMarker && pe) {
+        if (s.syncMuteMode !== 'OFF' && pe) {
           let rem: number;
           if (s.playing && actx && pe.applyAtAudioTime !== null) {
             rem = pe.applyAtAudioTime - actx.currentTime;
@@ -1006,34 +877,42 @@ export const TimedMutePage: React.FC = () => {
           }
         }
 
+        // Lane separator
         ctx2d.strokeStyle = '#112818';
+        ctx2d.lineWidth = 1;
         ctx2d.beginPath();
         ctx2d.moveTo(0, y0 + TRACK_H - 0.5);
         ctx2d.lineTo(w, y0 + TRACK_H - 0.5);
         ctx2d.stroke();
       }
 
+      // ── Playhead cursor line ─────────────────────────────────────────────
       ctx2d.strokeStyle = COLOR_CURSOR;
       ctx2d.lineWidth = 2;
       ctx2d.beginPath();
-      ctx2d.moveTo(CURSOR_X + 0.5, 0);
-      ctx2d.lineTo(CURSOR_X + 0.5, TIMELINE_H + TRACK_COUNT * TRACK_H);
+      ctx2d.moveTo(CURSOR_X + 0.5, CMD_BAR_H);
+      ctx2d.lineTo(CURSOR_X + 0.5, TRACKS_Y0 + TRACK_COUNT * TRACK_H);
       ctx2d.stroke();
 
+      // ── Timeline marker triangles ────────────────────────────────────────
+      // Triangle: 24px wide (±12), 12px tall (top to tip)
       const drawTimelineTriangle = (screenX: number, alpha: number) => {
         const sx = Math.round(screenX);
-        if (sx < -10 || sx > w + 10) return;
+        if (sx < -14 || sx > w + 14) return;
         ctx2d.save();
         ctx2d.globalAlpha = alpha;
         ctx2d.fillStyle = COLOR_TRIANGLE;
         ctx2d.beginPath();
-        ctx2d.moveTo(sx - 6, 2);
-        ctx2d.lineTo(sx + 6, 2);
-        ctx2d.lineTo(sx, 12);
+        ctx2d.moveTo(sx - 12, CMD_BAR_H + 2);
+        ctx2d.lineTo(sx + 12, CMD_BAR_H + 2);
+        ctx2d.lineTo(sx, CMD_BAR_H + 14);
         ctx2d.closePath();
         ctx2d.fill();
         ctx2d.restore();
       };
+
+      // Playhead triangle at CURSOR_X
+      drawTimelineTriangle(CURSOR_X, 1);
 
       const tp = timelinePointerRef.current;
       const dragSrc = markerDragSourceSecRef.current;
@@ -1052,51 +931,89 @@ export const TimedMutePage: React.FC = () => {
         drawTimelineTriangle(gx, 0.5);
       }
 
-      const labelY = TIMELINE_H + TRACK_COUNT * TRACK_H + Math.floor(LABELS_H * 0.65);
-      ctx2d.font = 'bold 18px sans-serif';
-      ctx2d.textAlign = 'center';
+      // ── Bottom status bar ────────────────────────────────────────────────
+      ctx2d.fillStyle = COLOR_CMD_BAR_BG;
+      ctx2d.fillRect(0, BOTTOM_BAR_Y, w, BOTTOM_BAR_H);
 
-      for (let tr = 0; tr < TRACK_COUNT; tr++) {
-        const cx = ((tr + 0.5) / TRACK_COUNT) * w;
-        const muted = s.muted[tr]!;
-        const preQ = s.preQueue.has(tr);
-        const pending = s.pending.has(tr);
-        let lab = muted ? COLOR_LABEL_MUTED : COLOR_LABEL_UNMUTED;
+      ctx2d.strokeStyle = '#1a3828';
+      ctx2d.lineWidth = 1;
+      ctx2d.beginPath();
+      ctx2d.moveTo(0, BOTTOM_BAR_Y + 0.5);
+      ctx2d.lineTo(w, BOTTOM_BAR_Y + 0.5);
+      ctx2d.stroke();
 
-        const inRejectBlinkNum = rejectActive && rejectBlinkTracksRef.current.has(tr);
-        const queuedArmed = s.syncInteractionMode === 'QUEUED' && s.shiftDown && preQ;
-        const numberPendingBlink =
-          pending && (s.syncInteractionMode === 'SIMPLE' || !s.shiftDown) && blinkPhase;
+      ctx2d.textBaseline = 'middle';
+      const barMidY = BOTTOM_BAR_Y + BOTTOM_BAR_H / 2;
 
-        if (inRejectBlinkNum) {
-          lab = muted
-            ? rejectPhase
-              ? '#ffb84a'
-              : COLOR_LABEL_MUTED
-            : rejectPhase
-              ? '#fff4dd'
-              : COLOR_LABEL_UNMUTED;
-        } else if (queuedArmed) {
-          lab = muted
-            ? blinkPhase
-              ? '#ffb84a'
-              : COLOR_LABEL_MUTED
-            : blinkPhase
-              ? '#886020'
-              : COLOR_LABEL_UNMUTED;
-        } else if (numberPendingBlink) {
-          lab = muted ? '#443010' : '#886020';
+      if (s.shiftDown) {
+        // Show track numbers with mute-state colors (visible while SHIFT held)
+        ctx2d.font = '20px Monogram, monospace';
+        ctx2d.textAlign = 'center';
+        for (let tr = 0; tr < TRACK_COUNT; tr++) {
+          const cx = ((tr + 0.5) / TRACK_COUNT) * w;
+          const muted = s.muted[tr]!;
+          const hasPending = s.pending.has(tr);
+          let lab = muted ? COLOR_LABEL_MUTED : COLOR_LABEL_UNMUTED;
+
+          const inRejectBlinkNum = rejectActive && rejectBlinkTracksRef.current.has(tr);
+          const numberPendingBlink = hasPending && blinkPhase;
+
+          if (inRejectBlinkNum) {
+            lab = muted
+              ? (rejectPhase ? '#ffb84a' : COLOR_LABEL_MUTED)
+              : (rejectPhase ? '#fff4dd' : COLOR_LABEL_UNMUTED);
+          } else if (numberPendingBlink) {
+            lab = muted ? '#443010' : '#886020';
+          }
+
+          ctx2d.fillStyle = lab;
+          ctx2d.fillText(String(tr + 1), cx, barMidY);
+        }
+      } else {
+        // Show 8 squares + T mm:ss + B bars:beats
+        const squareSize = 16;
+        const squareGap = 3;
+        const squaresStartX = Math.round(w * 0.12); // ~154px (~1/8 screen)
+        const squareY = BOTTOM_BAR_Y + Math.floor((BOTTOM_BAR_H - squareSize) / 2);
+        ctx2d.fillStyle = COLOR_BOTTOM_SQUARE;
+        for (let i = 0; i < TRACK_COUNT; i++) {
+          ctx2d.fillRect(squaresStartX + i * (squareSize + squareGap), squareY, squareSize, squareSize);
         }
 
-        ctx2d.fillStyle = lab;
-        ctx2d.fillText(String(tr + 1), cx, labelY);
+        const totalSecInt = Math.floor(songSec);
+        const mm = Math.floor(totalSecInt / 60).toString().padStart(2, '0');
+        const ss = (totalSecInt % 60).toString().padStart(2, '0');
+        const tStr = `T ${mm}:${ss}`;
+
+        const totalBeats = Math.floor(songSec / beatDur);
+        const bar = Math.floor(totalBeats / BEATS_PER_BAR); // 0-based: B 00:01 at time 0
+        const beat = (totalBeats % BEATS_PER_BAR) + 1;
+        const bStr = `B ${bar.toString().padStart(2, '0')}:${beat.toString().padStart(2, '0')}`;
+
+        ctx2d.fillStyle = COLOR_CMD_TEXT;
+        ctx2d.font = '20px Monogram, monospace';
+        ctx2d.textAlign = 'center';
+        ctx2d.fillText(tStr, 480, barMidY);
+        ctx2d.fillText(bStr, 680, barMidY);
       }
 
+      // ── CMD bar text (drawn last, stays on top) ──────────────────────────
+      ctx2d.fillStyle = COLOR_CMD_TEXT;
+      ctx2d.font = '20px Monogram, monospace';
+      ctx2d.textBaseline = 'middle';
+      const cmdMidY = CMD_BAR_H / 2;
+      ctx2d.textAlign = 'left';
+      ctx2d.fillText(s.stepDivision, 8, cmdMidY);
+      ctx2d.textAlign = 'right';
+      ctx2d.fillText('SCROLL', w - 8, cmdMidY);
+
+      // Load error overlay
       if (s.loadError) {
         ctx2d.fillStyle = '#ff4444';
         ctx2d.font = '14px sans-serif';
         ctx2d.textAlign = 'left';
-        ctx2d.fillText(s.loadError, 8, h - 8);
+        ctx2d.textBaseline = 'alphabetic';
+        ctx2d.fillText(s.loadError, 8, VISIBLE_HEIGHT - 8);
       }
 
       rafRef.current = requestAnimationFrame(draw);
@@ -1109,7 +1026,6 @@ export const TimedMutePage: React.FC = () => {
   }, [applyGainImmediate, bumpUi]);
 
   const s = stateRef.current;
-  const syncOn = s.syncMuteMode !== 'OFF';
 
   return (
     <div className="app-container" data-ui-revision={uiTick}>
@@ -1144,234 +1060,50 @@ export const TimedMutePage: React.FC = () => {
         </NavLink>
       </nav>
 
-      <div className="timed-mute-controls controls-bar">
-        <button
-          type="button"
-          className={`timed-mute-btn-play${s.playing ? ' active' : ''}`}
-          onClick={() => void handlePlayClick()}
-          disabled={!audioReady}
-        >
-          {s.playing ? 'PAUSE' : 'PLAY'}
-        </button>
-        <div ref={syncMuteWrapRef} className="timed-mute-sync-wrap">
-          <button
-            type="button"
-            className="timed-mute-btn-sync"
-            aria-haspopup="listbox"
-            aria-expanded={syncMenuOpen}
-            onMouseDown={onSyncMuteTriggerMouseDown}
-            onMouseUp={onSyncMuteTriggerMouseUp}
-            onMouseLeave={onSyncMuteTriggerMouseLeave}
-          >
-            SYNC MUTE: {s.syncMuteMode}
-          </button>
-          {syncMenuOpen ? (
-            <ul className="timed-mute-sync-menu" role="listbox" aria-label="Sync mute timing">
-              {SYNC_MUTE_OPTIONS.map((opt) => (
-                <li key={opt.value} role="presentation">
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={s.syncMuteMode === opt.value}
-                    className={
-                      s.syncMuteMode === opt.value ? 'timed-mute-sync-menu__item active' : 'timed-mute-sync-menu__item'
-                    }
-                    onMouseDown={(e) => e.preventDefault()}
-                    onMouseUp={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (e.button !== 0) return;
-                      setSyncMuteMode(opt.value);
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          className="timed-mute-btn-sync-mode"
-          onClick={toggleSyncInteractionMode}
-          disabled={!syncOn}
-          title={syncOn ? 'Toggle SIMPLE vs QUEUED sync mute' : 'Enable a sync mute mode first'}
-        >
-          SYNC MODE: {s.syncInteractionMode}
-        </button>
-      </div>
-
       <div className="waveform-viewport device-viewport">
         <canvas
           ref={canvasRef}
           width={VISIBLE_WIDTH}
           height={VISIBLE_HEIGHT}
           className="timed-mute-canvas"
-          aria-label="Eight-track waveform overview"
+          aria-label="Eight-track main overview"
           onPointerDown={onTimelinePointerDown}
           onPointerMove={onTimelinePointerMove}
           onPointerUp={onTimelinePointerUp}
           onPointerCancel={onTimelinePointerUp}
         />
+        {/* Transparent overlay select for step-division picker, positioned over CMD bar left */}
+        <select
+          aria-label="Scroll step size"
+          title="Scroll step size"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: 72,
+            height: CMD_BAR_H,
+            opacity: 0,
+            cursor: 'pointer',
+            zIndex: 10,
+          }}
+          value={s.stepDivision}
+          onChange={(e) => {
+            stateRef.current.stepDivision = e.target.value as StepDivision;
+            bumpUi();
+          }}
+        >
+          {STEP_DIVISIONS.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
       </div>
 
       <div className="instructions">
-        <strong>SPACE</strong>: ⏯ PLAY/PAUSE – <strong>SHIFT + 1–8</strong>: mute/unmute – <strong>ARROW-Keys</strong>: ⏪︎ ⏩︎ ±1 bar – <strong>SHIFT+LEFT</strong>: ⏮ song start. <br></br>
-        <strong>Top timeline</strong>: set ▼ markers (<strong>click</strong> add/remove; <strong>drag</strong> to move). <br></br>
-        "SYNC MARKER": syncs only at ▼ markers; Invalid: no more markers ahead DENIES and rapid-blinks the track.
+        <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>SHIFT + 1–8</strong>: mute/unmute (synced to bar while playing) &ndash; <strong>ARROW-Keys</strong>: ⏪︎ ⏩︎ scroll by step &ndash; <strong>SHIFT+LEFT</strong>: ⏮ song start.<br />
+        <strong>Top timeline</strong>: set ▼ markers (<strong>click</strong> add/remove; <strong>drag</strong> to move). &ndash; <strong>Step size</strong>: click the division value top-left to change scroll step.
       </div>
-
-      <details className="algo-details">
-        <summary>Timed Mute / Unmute — Logic Reference</summary>
-        <pre className="algo-description">{`\
-TIMED MUTE / UNMUTE — DEVELOPER LOGIC REFERENCE
-================================================
-
-PURPOSE
--------
-N independent mute states per track. When a sync mode is active, mute/unmute
-changes are deferred to a future musical boundary instead of taking effect
-immediately.
-
-
-ABSTRACT STATE
---------------
-syncMuteMode      ∈ { OFF, BEAT, BAR, 4BARS, 8BARS, MARKER }
-syncInteractionMode ∈ { SIMPLE, QUEUED } at their discretion
-
-Per track k:
-  muted[k]         boolean
-  pending[k]?      { targetMuted, boundary (song-position), applyTime (wall-clock, null if stopped) }
-
-Global:
-  preQueue         set of track indices  (QUEUED mode, arm held only)
-  rejectBlink      set of track indices + expiry timestamp
-
-
-ABSTRACT EVENTS  (host maps these to its own input scheme)
----------------
-ImmediateMuteToggle(k)   — only valid when syncMuteMode == OFF
-SyncAction(k)            — sync ON + modifier + track k
-SyncArmActive            — momentary modifier pressed (QUEUED mode only)
-SyncArmReleased          — modifier released (QUEUED mode only)
-
-
-PSEUDOCODE
-----------
-OnImmediateMuteToggle(k):
-  if syncMuteMode == OFF: muted[k] ^= 1
-
-OnSyncAction(k):
-  if QUEUED and SyncArmActive:           // arm held: collect or cancel phase
-    if pending[k] exists:                // cancel a previously committed entry
-      remove pending[k]; return
-    toggle preQueue[k]; return           // add or remove from arm set
-  if pending[k] exists:                  // second press = cancel (SIMPLE, or QUEUED arm released)
-    remove pending[k]; return
-  tryScheduleSingle(k)                   // SIMPLE, or QUEUED without arm
-
-tryScheduleSingle(k):
-  b = nextEligibleBoundary(transportNow, syncMuteMode, userMarkers)
-  if b == DENY: rejectBlink({k}); return
-  pending[k] = { targetMuted: !muted[k], boundary: b,
-                 applyTime: transportNow + delta (null if stopped) }
-
-OnSyncArmReleased():             // QUEUED only
-  if preQueue is empty: return
-  // ONE shared boundary for the entire batch — key distinction vs SIMPLE
-  // (SIMPLE computes an individual boundary per track at the time of each press)
-  b = nextEligibleBoundary(transportNow, syncMuteMode, userMarkers)
-  if b == DENY: rejectBlink(preQueue); preQueue unchanged; return
-  for k in preQueue:
-    pending[k] = { targetMuted: !muted[k], boundary: b, applyTime: ... }
-  preQueue.clear()
-
-OnTransportTick():
-  for k with pending[k]:
-    if applyTime != null and now >= applyTime:
-      muted[k] = pending[k].targetMuted; remove pending[k]
-
-OnTransportStop():
-  for k with pending[k]: pending[k].applyTime = null   // keep boundary
-
-OnTransportStart():
-  for k with pending[k]:                               // recalculate wall-clock
-    pending[k].applyTime = now + timeUntil(transportNow, pending[k].boundary)
-
-OnSyncMuteModeChange(OFF):
-  pending.clear(); preQueue.clear()
-
-
-DENY CONDITION
---------------
-nextEligibleBoundary(transportNow, mode, markers) is a host-specific black box.
-It must enforce a minimum lead time of at least one beat before the boundary fires.
-
-Grid modes (BEAT / BAR / 4BARS / 8BARS):
-  Structurally never DENY — there is always a next grid boundary.
-
-MARKER mode only:
-  DENY when no user-placed marker exists strictly ahead of the current transport
-  position before song end. No wrap to the next loop iteration is attempted,
-  although further logic COULD check if loop mode is ON and then wrap and
-  mute/unmute at song start marker. (at your discretion)
-
-  → Placed marker ahead: OK.
-  → No marker ahead:      DENY + reject blink on the requested track(s).
-
-
-VISUAL FEEDBACK
----------------
-┌──────────────────────────────────────────────────┬──────────────────────┬──────────────────┐
-│ Condition                                        │ Track content        │ Track label      │
-├──────────────────────────────────────────────────┼──────────────────────┼──────────────────┤
-│ pending[k] active (SIMPLE or arm not held)       │ slow blink  (~4 Hz)  │ slow blink       │
-│ preQueue[k] (QUEUED, arm held, not committed)    │ no change            │ slow blink only  │
-│ rejectBlink[k] active                            │ rapid blink (~11 Hz) │ rapid blink      │
-│                                                  │ duration ~450 ms     │ duration ~450 ms │
-│ Sync OFF / idle                                  │ steady               │ steady           │
-└──────────────────────────────────────────────────┴──────────────────────┴──────────────────┘
-
-Positional marker: each track with a pending entry shows a visual indicator
-(e.g. a line) at the position corresponding to remaining time until boundary.
-No such marker for preQueue entries — they are not yet committed to a boundary.
-
-
-MERMAID DIAGRAMS  (copy into https://mermaid.live or any Mermaid viewer)
-----------------
-
-── State machine: single track ──────────────────────────────────────────────
-
-stateDiagram-v2
-  [*] --> Idle
-  Idle --> Pending : SyncAction(k) / trySchedule → OK
-  Idle --> PreQueued : SyncAction(k) / QUEUED+arm held
-  Pending --> Idle : SyncAction(k) again → cancel
-  Pending --> Idle : SyncAction(k) / QUEUED+arm held → cancel
-  Pending --> Idle : OnTransportTick boundary reached → apply muted[k]
-  PreQueued --> Idle : SyncAction(k) again → dequeue
-  PreQueued --> Pending : SyncArmReleased → commitBatch → OK
-  PreQueued --> Idle : SyncArmReleased → commitBatch → DENY\\n[RejectFlash]
-  Idle --> Idle : SyncAction(k) / trySchedule → DENY\\n[RejectFlash]
-
-── Decision tree: OnSyncAction(k) ───────────────────────────────────────────
-
-flowchart TD
-  A([SyncAction k]) --> B{QUEUED and\\nSyncArmActive?}
-  B -- yes --> C{pending k\\nexists?}
-  C -- yes --> D[Cancel: remove pending k]
-  C -- no --> E[Toggle preQueue k]
-  B -- no --> F{pending k\\nexists?}
-  F -- yes --> G[Cancel: remove pending k]
-  F -- no --> H[tryScheduleSingle k]
-  H --> I{nextEligibleBoundary\\nreturns DENY?}
-  I -- yes --> J[rejectBlink track k\\nno pending set]
-  I -- no --> K[Set pending k\\nboundary + applyTime]
-`}</pre>
-      </details>
     </div>
   );
-}
+};
 
-export default TimedMutePage;
+export default MainOverviewPage;
