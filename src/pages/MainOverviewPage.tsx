@@ -34,7 +34,10 @@ const COLOR_WAVE_SELECTED = '#a6e22e';
 const COLOR_WAVE_MUTED = '#75715e';
 const COLOR_WAVE_MUTED_SEL = '#668c1c';
 const COLOR_CURSOR = '#7fffff';
-const COLOR_LOOP_SELECTION = 'rgba(127, 255, 255, 0.14)';
+const COLOR_LOOP_SELECTION = 'rgba(255, 160, 52, 0.18)';
+const COLOR_LOOP_SELECTION_MARKER = '#ffa034';
+const COLOR_CLIP_SELECTION = 'rgba(127, 255, 255, 0.27)';
+const COLOR_CLIP_SELECTION_MARKER = '#7fffff';
 const COLOR_SYNC_UPCOMING_MARKER = '#ffaa00';
 const COLOR_TRIANGLE = '#ffa034';
 const COLOR_TICK_BEAT = '#6a9aaa';
@@ -53,6 +56,9 @@ const UNDO_BUDGET_SEC = 480;
 const ERROR_COPY_MAX_LENGTH_MSG =
   'ERROR Maximum Copy length : 8 minutes (combined).';
 const TRANSIENT_TOAST_MS = 1700;
+const COMMAND_TOAST_MS = 800;
+
+type TransientToastPayload = { message: string; variant: 'error' | 'success' };
 
 type StepDivision = '4/1' | '2/1' | '1/1' | '1/2' | '1/4' | '1/8' | '1/16' | '1/32' | '1/64';
 const STEP_DIVISIONS: StepDivision[] = [
@@ -256,6 +262,29 @@ function isShiftCode(code: string): boolean {
   return code === 'ShiftLeft' || code === 'ShiftRight';
 }
 
+function buildClipboardBuffers(clip: ClipboardData, ctx: AudioContext): AudioBuffer[] {
+  const buffers: AudioBuffer[] = [];
+  for (let i = 0; i < TRACK_COUNT; i++) {
+    const channels = clip.tracks.get(i);
+    const numChannels = channels ? channels.length : 1;
+    const length = channels
+      ? channels[0]!.length
+      : Math.ceil(clip.durationSec * clip.sampleRate);
+    const buf = ctx.createBuffer(numChannels, Math.max(1, length), clip.sampleRate);
+    if (channels) {
+      for (let ch = 0; ch < channels.length; ch++) {
+        buf.copyToChannel(channels[ch]! as Float32Array<ArrayBuffer>, ch);
+      }
+    }
+    buffers.push(buf);
+  }
+  return buffers;
+}
+
+function computeClipboardColumnCount(durationSec: number): number {
+  return Math.max(1, Math.floor(durationSec * PIXELS_PER_SECOND / BAR_PITCH));
+}
+
 // ---------------------------------------------------------------------------
 // Audio manipulation helpers (pure, operate on AudioBuffer channel data)
 // ---------------------------------------------------------------------------
@@ -345,6 +374,15 @@ interface DrawState {
   loadError: string | null;
   stepDivision: StepDivision;
   loopSelection: LoopSelection | null;
+  // Clipboard Overview Mode
+  clipboardMode: boolean;
+  clipboardSongSec: number;
+  clipboardPlaying: boolean;
+  clipboardSelectedTracks: boolean[];
+  clipboardSelection: LoopSelection | null;
+  clipboardAmplitudes: number[][] | null;
+  clipboardColumnCount: number;
+  clipboardDurationSec: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -366,6 +404,15 @@ export const MainOverviewPage: React.FC = () => {
   const undoStackRef = useRef<UndoEntry[]>([]);
   const redoEntryRef = useRef<UndoEntry | null>(null);
 
+  // Clipboard Overview Mode audio refs
+  const clipboardBuffersRef = useRef<AudioBuffer[] | null>(null);
+  const clipboardSourcesRef = useRef<AudioBufferSourceNode[] | null>(null);
+  const clipboardGainNodesRef = useRef<GainNode[] | null>(null);
+  const clipboardAnchorAudioTimeRef = useRef(0);
+  const clipboardAnchorSongSecRef = useRef(0);
+  // Internal clipboard for CUT/COPY/PASTE within Clipboard Overview (never crosses back to main clipboard)
+  const cbInternalClipRef = useRef<ClipboardData | null>(null);
+
   const stateRef = useRef<DrawState>({
     songSec: 0,
     playing: false,
@@ -381,11 +428,20 @@ export const MainOverviewPage: React.FC = () => {
     loadError: null,
     stepDivision: '1/4',
     loopSelection: null,
+    // Clipboard Overview Mode
+    clipboardMode: false,
+    clipboardSongSec: 0,
+    clipboardPlaying: false,
+    clipboardSelectedTracks: Array(TRACK_COUNT).fill(false),
+    clipboardSelection: null,
+    clipboardAmplitudes: null,
+    clipboardColumnCount: 0,
+    clipboardDurationSec: 0,
   });
 
   const [uiTick, setUiTick] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
-  const [transientToast, setTransientToast] = useState<string | null>(null);
+  const [transientToast, setTransientToast] = useState<TransientToastPayload | null>(null);
   const transientToastTimerRef = useRef<number>(0);
 
   const rejectBlinkEndMsRef = useRef(0);
@@ -409,13 +465,21 @@ export const MainOverviewPage: React.FC = () => {
 
   const bumpUi = useCallback(() => setUiTick((t) => t + 1), []);
 
-  const showTransientToast = useCallback((message: string) => {
-    clearTimeout(transientToastTimerRef.current);
-    setTransientToast(message);
-    transientToastTimerRef.current = window.setTimeout(() => {
-      setTransientToast(null);
-    }, TRANSIENT_TOAST_MS);
-  }, []);
+  const showTransientToast = useCallback(
+    (
+      message: string,
+      options?: Partial<{ durationMs: number; variant: 'error' | 'success' }>
+    ) => {
+      const durationMs = options?.durationMs ?? TRANSIENT_TOAST_MS;
+      const variant = options?.variant ?? 'error';
+      clearTimeout(transientToastTimerRef.current);
+      setTransientToast({ message, variant });
+      transientToastTimerRef.current = window.setTimeout(() => {
+        setTransientToast(null);
+      }, durationMs);
+    },
+    []
+  );
 
   useEffect(() => {
     return () => clearTimeout(transientToastTimerRef.current);
@@ -514,6 +578,261 @@ export const MainOverviewPage: React.FC = () => {
     bumpUi();
   }, [getSongSecNow, stopAllSources, bumpUi]);
 
+  // ---------------------------------------------------------------------------
+  // Clipboard Overview Mode — Playback
+  // ---------------------------------------------------------------------------
+
+  const getClipboardSongSecNow = useCallback((): number => {
+    const s = stateRef.current;
+    if (!s.clipboardPlaying) return s.clipboardSongSec;
+    const ctx = audioCtxRef.current;
+    if (!ctx) return s.clipboardSongSec;
+    const elapsed = ctx.currentTime - clipboardAnchorAudioTimeRef.current;
+    let pos = clipboardAnchorSongSecRef.current + elapsed;
+    const dur = s.clipboardDurationSec;
+    if (dur > 0) {
+      while (pos >= dur) pos -= dur;
+      while (pos < 0) pos += dur;
+    }
+    return pos;
+  }, []);
+
+  const stopAllClipboardSources = useCallback(() => {
+    const srcs = clipboardSourcesRef.current;
+    if (!srcs) return;
+    for (const src of srcs) {
+      try { src.stop(); } catch { /* already stopped */ }
+    }
+    clipboardSourcesRef.current = null;
+  }, []);
+
+  const startClipboardPlayback = useCallback(() => {
+    const ctx = audioCtxRef.current;
+    const buffers = clipboardBuffersRef.current;
+    if (!ctx || !buffers) return;
+
+    // Ensure clipboard gain nodes exist (all gain = 1, no muting)
+    if (!clipboardGainNodesRef.current) {
+      const gains: GainNode[] = [];
+      for (let i = 0; i < TRACK_COUNT; i++) {
+        const g = ctx.createGain();
+        g.gain.value = 1;
+        g.connect(ctx.destination);
+        gains.push(g);
+      }
+      clipboardGainNodesRef.current = gains;
+    }
+    const gains = clipboardGainNodesRef.current;
+
+    stopAllClipboardSources();
+    const startPos = stateRef.current.clipboardSongSec;
+    const dur = stateRef.current.clipboardDurationSec;
+    const when = ctx.currentTime;
+    const srcs: AudioBufferSourceNode[] = [];
+
+    for (let i = 0; i < TRACK_COUNT; i++) {
+      const buf = buffers[i];
+      if (!buf) continue;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.loopStart = 0;
+      src.loopEnd = Math.min(dur, buf.duration);
+      src.connect(gains[i]!);
+      const offset = dur > 0 ? startPos % buf.duration : 0;
+      try { src.start(when, offset); } catch { src.start(when, 0); }
+      srcs.push(src);
+    }
+
+    clipboardSourcesRef.current = srcs;
+    clipboardAnchorAudioTimeRef.current = when;
+    clipboardAnchorSongSecRef.current = startPos;
+    stateRef.current.clipboardPlaying = true;
+    bumpUi();
+  }, [stopAllClipboardSources, bumpUi]);
+
+  const pauseClipboardPlayback = useCallback(() => {
+    stateRef.current.clipboardSongSec = getClipboardSongSecNow();
+    stateRef.current.clipboardPlaying = false;
+    stopAllClipboardSources();
+    bumpUi();
+  }, [getClipboardSongSecNow, stopAllClipboardSources, bumpUi]);
+
+  // ---------------------------------------------------------------------------
+  // Clipboard Overview Mode — Internal CUT / COPY / PASTE
+  // ---------------------------------------------------------------------------
+
+  const recomputeClipboardTrackAmplitudes = useCallback((trackIndex: number) => {
+    const bufs = clipboardBuffersRef.current;
+    const s = stateRef.current;
+    if (!bufs || !s.clipboardAmplitudes) return;
+    const buf = bufs[trackIndex];
+    if (!buf) return;
+    s.clipboardAmplitudes[trackIndex] = computeAmplitudes(buf, s.clipboardColumnCount);
+  }, []);
+
+  const handleClipboardCutCopy = useCallback((mode: 'cut' | 'copy') => {
+    const clip = clipboardRef.current;
+    const bufs = clipboardBuffersRef.current;
+    const s = stateRef.current;
+    if (!clip || !bufs) return;
+
+    // Determine target tracks: all selected tracks, or all tracks that have audio if none selected
+    const anySelected = s.clipboardSelectedTracks.some(Boolean);
+    const targetTracks: number[] = anySelected
+      ? s.clipboardSelectedTracks.reduce<number[]>((acc, sel, i) => { if (sel) acc.push(i); return acc; }, [])
+      : Array.from({ length: TRACK_COUNT }, (_, i) => i).filter(i => clip.tracks.has(i));
+
+    if (targetTracks.length === 0) return;
+
+    // Determine time range: clipboardSelection if active, else full clipboard duration
+    const hasSel = s.clipboardSelection !== null && s.clipboardSelection.endSec > s.clipboardSelection.startSec + 1e-4;
+    const startSec = hasSel ? s.clipboardSelection!.startSec : 0;
+    const endSec   = hasSel ? s.clipboardSelection!.endSec   : s.clipboardDurationSec;
+    const durationSec = endSec - startSec;
+    if (durationSec <= 0) return;
+
+    const sampleRate = clip.sampleRate;
+
+    if (mode === 'copy') {
+      const intTracks = new Map<number, Float32Array[]>();
+      for (const ti of targetTracks) {
+        const buf = bufs[ti];
+        if (!buf) continue;
+        intTracks.set(ti, extractAudioSection(buf, startSec, endSec));
+      }
+      cbInternalClipRef.current = { tracks: intTracks, sampleRate, durationSec };
+    } else {
+      // CUT: extract into internal clip, silence in AudioBuffer AND in clipboardRef.current.tracks
+      const intTracks = new Map<number, Float32Array[]>();
+      for (const ti of targetTracks) {
+        const buf = bufs[ti];
+        if (!buf) continue;
+        const extracted = extractAudioSection(buf, startSec, endSec);
+        intTracks.set(ti, extracted.map(ch => ch.slice()));
+        // Silence the AudioBuffer (for immediate playback reflection)
+        silenceAudioSection(buf, startSec, endSec);
+        // Sync silence into clipboardRef.current.tracks Float32Arrays
+        const cbChannels = clip.tracks.get(ti);
+        if (cbChannels) {
+          const sr = buf.sampleRate;
+          const sStart = Math.floor(startSec * sr);
+          const chLen = cbChannels[0]?.length ?? 0;
+          const sEnd = Math.min(Math.floor(endSec * sr), chLen);
+          for (const ch of cbChannels) {
+            ch.fill(0, sStart, sEnd);
+          }
+          // If the full track was silenced, remove from map so UI reflects "empty"
+          if (sStart <= 1 && sEnd >= chLen - 1) {
+            clip.tracks.delete(ti);
+          }
+        }
+        recomputeClipboardTrackAmplitudes(ti);
+      }
+      cbInternalClipRef.current = { tracks: intTracks, sampleRate, durationSec };
+    }
+
+    const verb = mode === 'cut' ? 'Cut' : 'Copy';
+    let toastMsg = verb;
+    if (anySelected && targetTracks.length > 1) {
+      toastMsg = hasSel ? `${verb}: all selected (Range)` : `${verb}: all selected`;
+    } else if (anySelected && targetTracks.length === 1) {
+      toastMsg = hasSel ? `${verb} (Range)` : verb;
+    } else if (hasSel) {
+      toastMsg = `${verb} (Range)`;
+    }
+    showTransientToast(toastMsg, { durationMs: COMMAND_TOAST_MS, variant: 'success' });
+    bumpUi();
+  }, [recomputeClipboardTrackAmplitudes, bumpUi, showTransientToast]);
+
+  const handleClipboardPaste = useCallback(() => {
+    const clip = clipboardRef.current;
+    const bufs = clipboardBuffersRef.current;
+    const intClip = cbInternalClipRef.current;
+    const s = stateRef.current;
+    if (!clip || !bufs || !intClip || intClip.tracks.size === 0) return;
+
+    const pasteStartSec = getClipboardSongSecNow();
+
+    // Determine target track mapping:
+    // - 1 track in internal clip → paste into first selected track, else use its source track index
+    // - Multiple tracks → paste back into their source track indices
+    let targetMap: Map<number, Float32Array[]>;
+    if (intClip.tracks.size === 1) {
+      const [srcTi, srcChannels] = [...intClip.tracks.entries()][0]!;
+      const selectedTracks = s.clipboardSelectedTracks
+        .reduce<number[]>((acc, sel, i) => { if (sel) acc.push(i); return acc; }, []);
+      const destTi = selectedTracks.length > 0 ? selectedTracks[0]! : srcTi;
+      targetMap = new Map([[destTi, srcChannels]]);
+    } else {
+      targetMap = intClip.tracks;
+    }
+
+    for (const [ti, srcChannels] of targetMap) {
+      const buf = bufs[ti];
+      if (!buf) continue;
+      // Write into the AudioBuffer for immediate playback
+      overwriteAudioSection(buf, pasteStartSec, srcChannels);
+      // Sync into clipboardRef.current.tracks Float32Arrays
+      const sr = buf.sampleRate;
+      const sStart = Math.floor(pasteStartSec * sr);
+      const destChannels = clip.tracks.get(ti);
+      if (destChannels) {
+        // Overwrite existing track channels
+        for (let ch = 0; ch < Math.min(destChannels.length, srcChannels.length); ch++) {
+          const src = srcChannels[ch]!;
+          const dst = destChannels[ch]!;
+          const len = Math.min(src.length, dst.length - sStart);
+          if (len > 0) dst.set(src.subarray(0, len), sStart);
+        }
+      } else {
+        // Track had no audio before — create new Float32Array channels in clipboardRef
+        const numChannels = buf.numberOfChannels;
+        const totalSamples = Math.ceil(s.clipboardDurationSec * sr);
+        const newChannels: Float32Array[] = Array.from({ length: numChannels }, () => new Float32Array(totalSamples));
+        for (let ch = 0; ch < Math.min(numChannels, srcChannels.length); ch++) {
+          const src = srcChannels[ch]!;
+          const len = Math.min(src.length, totalSamples - sStart);
+          if (len > 0) newChannels[ch]!.set(src.subarray(0, len), sStart);
+        }
+        clip.tracks.set(ti, newChannels);
+      }
+      recomputeClipboardTrackAmplitudes(ti);
+    }
+
+    showTransientToast('Paste', { durationMs: COMMAND_TOAST_MS, variant: 'success' });
+    bumpUi();
+  }, [getClipboardSongSecNow, recomputeClipboardTrackAmplitudes, bumpUi, showTransientToast]);
+
+  const applyClipboardScrollStep = useCallback((sign: -1 | 1) => {
+    const s = stateRef.current;
+    const dur = s.clipboardDurationSec;
+    if (dur <= 0) return;
+    const delta = stepDivisionToSec(s.stepDivision);
+    const now = getClipboardSongSecNow();
+    const nearestGrid = Math.round(now / delta) * delta;
+    const isAligned = Math.abs(now - nearestGrid) < 1e-3;
+    let next: number;
+    if (isAligned) {
+      next = now + sign * delta;
+    } else if (sign < 0) {
+      next = Math.floor(now / delta) * delta;
+    } else {
+      next = Math.ceil(now / delta) * delta;
+    }
+    // Clamp to clipboard duration (no wrap-around for region navigation)
+    next = Math.max(0, Math.min(dur - 1e-6, next));
+    s.clipboardSongSec = next;
+    if (s.clipboardPlaying) {
+      stopAllClipboardSources();
+      clipboardAnchorSongSecRef.current = next;
+      const ctx = audioCtxRef.current;
+      if (ctx) clipboardAnchorAudioTimeRef.current = ctx.currentTime;
+      startClipboardPlayback();
+    }
+    bumpUi();
+  }, [getClipboardSongSecNow, stopAllClipboardSources, startClipboardPlayback, bumpUi]);
+
   /** One grid step in song time: sign +1 = forward (ArrowRight), -1 = back (ArrowLeft). */
   const applySongScrollStep = useCallback((sign: -1 | 1) => {
     const s = stateRef.current;
@@ -548,13 +867,16 @@ export const MainOverviewPage: React.FC = () => {
     const onWheel = (e: WheelEvent) => {
       if (e.deltaY === 0) return;
       e.preventDefault();
-      // Scroll up (negative deltaY) = back; scroll down (positive deltaY) = forward
-      if (e.deltaY < 0) applySongScrollStep(-1);
-      else applySongScrollStep(1);
+      const sign = e.deltaY < 0 ? -1 : 1;
+      if (stateRef.current.clipboardMode) {
+        applyClipboardScrollStep(sign);
+      } else {
+        applySongScrollStep(sign);
+      }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [applySongScrollStep]);
+  }, [applySongScrollStep, applyClipboardScrollStep]);
 
   const toggleMuteImmediate = useCallback(
     (trackIndex: number) => {
@@ -684,6 +1006,12 @@ export const MainOverviewPage: React.FC = () => {
       clipboardRef.current = { tracks: clipTracks, sampleRate, durationSec };
     }
 
+    showTransientToast(
+      mode === 'cut'
+        ? (allUnmuted ? 'Cut: all unmuted' : 'Cut')
+        : (allUnmuted ? 'Copy: all unmuted' : 'Copy'),
+      { durationMs: COMMAND_TOAST_MS, variant: 'success' }
+    );
     bumpUi();
   }, [getSongSecNow, recomputeTrackAmplitudes, enforceUndoBudget, bumpUi, showTransientToast]);
 
@@ -738,6 +1066,7 @@ export const MainOverviewPage: React.FC = () => {
     enforceUndoBudget();
     redoEntryRef.current = null;
 
+    showTransientToast('Paste', { durationMs: COMMAND_TOAST_MS, variant: 'success' });
     bumpUi();
   }, [getSongSecNow, recomputeTrackAmplitudes, enforceUndoBudget, bumpUi, showTransientToast]);
 
@@ -808,7 +1137,70 @@ export const MainOverviewPage: React.FC = () => {
     bumpUi();
   }, [recomputeTrackAmplitudes, enforceUndoBudget, bumpUi]);
 
+  const enterClipboardMode = useCallback(() => {
+    const clip = clipboardRef.current;
+    if (!clip || clip.tracks.size === 0) return;
+
+    // Pause song playback if running
+    if (stateRef.current.playing) {
+      pausePlayback();
+    }
+
+    // Build AudioBuffers from clipboard Float32Arrays.
+    // Use the existing AudioContext or a temporary offline one for buffer construction.
+    const existingCtx = audioCtxRef.current;
+    const bufCtx = existingCtx ?? new AudioContext();
+    const bufs = buildClipboardBuffers(clip, bufCtx);
+    if (!existingCtx) {
+      // Store the context so playback can use it later
+      audioCtxRef.current = bufCtx;
+    }
+    void bufCtx.resume();
+    clipboardBuffersRef.current = bufs;
+
+    // Compute amplitudes for each clipboard track
+    const colCount = computeClipboardColumnCount(clip.durationSec);
+    const amps: number[][] = bufs.map((buf) => computeAmplitudes(buf, colCount));
+
+    const s = stateRef.current;
+    s.clipboardMode = true;
+    s.clipboardSongSec = 0;
+    s.clipboardPlaying = false;
+    s.clipboardSelectedTracks = Array(TRACK_COUNT).fill(false);
+    s.clipboardSelection = null;
+    s.clipboardAmplitudes = amps;
+    s.clipboardColumnCount = colCount;
+    s.clipboardDurationSec = clip.durationSec;
+    cbInternalClipRef.current = null;
+    bumpUi();
+  }, [pausePlayback, bumpUi]);
+
+  const exitClipboardMode = useCallback(() => {
+    // Stop clipboard playback
+    if (stateRef.current.clipboardPlaying) {
+      pauseClipboardPlayback();
+    }
+    stopAllClipboardSources();
+
+    // Teardown clipboard gain nodes
+    if (clipboardGainNodesRef.current) {
+      for (const g of clipboardGainNodesRef.current) {
+        try { g.disconnect(); } catch { /* ignore */ }
+      }
+      clipboardGainNodesRef.current = null;
+    }
+    clipboardBuffersRef.current = null;
+
+    cbInternalClipRef.current = null;
+    const s = stateRef.current;
+    s.clipboardMode = false;
+    s.clipboardPlaying = false;
+    s.clipboardAmplitudes = null;
+    bumpUi();
+  }, [pauseClipboardPlayback, stopAllClipboardSources, bumpUi]);
+
   // Timeline pointer: only active in GRID zone (y: CMD_BAR_H … TRACKS_Y0)
+  // Also handles bottom-bar clicks for clipboard mode toggle
   const onTimelinePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (e.button !== 0) return;
@@ -816,6 +1208,27 @@ export const MainOverviewPage: React.FC = () => {
       if (!canvas) return;
       const r = canvas.getBoundingClientRect();
       const ly = ((e.clientY - r.top) / r.height) * VISIBLE_HEIGHT;
+
+      // Bottom-bar click: toggle clipboard mode
+      if (ly >= BOTTOM_BAR_Y) {
+        const lx = viewportClientXToLogical(canvas, e.clientX);
+        const squareSize = 16;
+        const squareGap = 3;
+        const squaresStartX = Math.round(VISIBLE_WIDTH * 0.12);
+        const squaresEndX = squaresStartX + TRACK_COUNT * (squareSize + squareGap);
+        if (lx >= squaresStartX && lx <= squaresEndX) {
+          if (stateRef.current.clipboardMode) {
+            exitClipboardMode();
+          } else if (clipboardRef.current && clipboardRef.current.tracks.size > 0) {
+            enterClipboardMode();
+          }
+        }
+        return;
+      }
+
+      // In clipboard mode, disable grid/marker interaction
+      if (stateRef.current.clipboardMode) return;
+
       if (ly < CMD_BAR_H || ly >= TRACKS_Y0) return;
       const lx = viewportClientXToLogical(canvas, e.clientX);
       const songSec = getSongSecNow();
@@ -847,7 +1260,7 @@ export const MainOverviewPage: React.FC = () => {
       canvas.setPointerCapture(e.pointerId);
       e.preventDefault();
     },
-    [getSongSecNow]
+    [getSongSecNow, enterClipboardMode, exitClipboardMode]
   );
 
   const onTimelinePointerMove = useCallback(
@@ -984,12 +1397,20 @@ export const MainOverviewPage: React.FC = () => {
     if (!audioReady || !buffersRef.current) return;
     const ctx = ensureAudioGraph();
     await ctx.resume();
+    if (stateRef.current.clipboardMode) {
+      if (stateRef.current.clipboardPlaying) {
+        pauseClipboardPlayback();
+      } else {
+        startClipboardPlayback();
+      }
+      return;
+    }
     if (stateRef.current.playing) {
       pausePlayback();
     } else {
       startPlayback();
     }
-  }, [audioReady, ensureAudioGraph, pausePlayback, startPlayback]);
+  }, [audioReady, ensureAudioGraph, pausePlayback, startPlayback, pauseClipboardPlayback, startClipboardPlayback]);
 
   // Keyboard input
   useEffect(() => {
@@ -1037,6 +1458,112 @@ export const MainOverviewPage: React.FC = () => {
           e.code === 'Numpad9' || e.code === 'NumpadSubtract') {
         clearTimeout(shiftResetTimerRef.current);
       }
+
+      // ── Clipboard Overview Mode keyboard branch ──────────────────────────
+      if (s.clipboardMode) {
+        // Escape: exit clipboard mode
+        if (e.code === 'Escape') {
+          e.preventDefault();
+          exitClipboardMode();
+          return;
+        }
+
+        // Numpad5: set clipboard selection start
+        if (e.code === 'Numpad5') {
+          e.preventDefault();
+          const t = Math.min(Math.max(0, getClipboardSongSecNow()), s.clipboardDurationSec);
+          const prevEnd = s.clipboardSelection?.endSec ?? -1;
+          s.clipboardSelection = prevEnd > t + 1e-4
+            ? { startSec: t, endSec: prevEnd }
+            : { startSec: t, endSec: -1 };
+          bumpUi();
+          return;
+        }
+
+        // Numpad6: set clipboard selection end; end <= start clears selection
+        if (e.code === 'Numpad6') {
+          e.preventDefault();
+          const t = Math.min(Math.max(0, getClipboardSongSecNow()), s.clipboardDurationSec);
+          const startSec = s.clipboardSelection?.startSec ?? 0;
+          if (t <= startSec + 1e-4) {
+            s.clipboardSelection = null;
+          } else {
+            s.clipboardSelection = { startSec, endSec: t };
+          }
+          bumpUi();
+          return;
+        }
+
+        // Arrow keys + SHIFT+ArrowLeft: scroll clipboard
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          if (e.shiftKey && e.key === 'ArrowLeft') {
+            s.clipboardSongSec = 0;
+            if (s.clipboardPlaying) {
+              stopAllClipboardSources();
+              clipboardAnchorSongSecRef.current = 0;
+              const ctx = audioCtxRef.current;
+              if (ctx) clipboardAnchorAudioTimeRef.current = ctx.currentTime;
+              startClipboardPlayback();
+            }
+            bumpUi();
+            return;
+          }
+          applyClipboardScrollStep(e.key === 'ArrowLeft' ? -1 : 1);
+          return;
+        }
+
+        // Numpad8: CUT within clipboard (into internal clipboard)
+        if (e.code === 'Numpad8') {
+          e.preventDefault();
+          handleClipboardCutCopy('cut');
+          return;
+        }
+
+        // Numpad9: COPY within clipboard (into internal clipboard)
+        if (e.code === 'Numpad9') {
+          e.preventDefault();
+          handleClipboardCutCopy('copy');
+          return;
+        }
+
+        // NumpadSubtract: PASTE from internal clipboard into clipboard tracks
+        if (e.code === 'NumpadSubtract') {
+          e.preventDefault();
+          handleClipboardPaste();
+          return;
+        }
+
+        // 1-8 / SHIFT+1-8: track selection
+        const cbDigit =
+          e.code >= 'Digit1' && e.code <= 'Digit8' ? parseInt(e.code.slice(5), 10) - 1 : -1;
+        const cbNumpad =
+          e.code >= 'Numpad1' && e.code <= 'Numpad4'
+            ? parseInt(e.code.slice(6), 10) - 1
+            : -1;
+        const cbTrack = cbDigit >= 0 ? cbDigit : cbNumpad;
+        if (cbTrack >= 0 && cbTrack < TRACK_COUNT) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            // SHIFT+1-8: multi-toggle — add/remove track from selection
+            s.clipboardSelectedTracks = s.clipboardSelectedTracks.map((v, i) =>
+              i === cbTrack ? !v : v
+            );
+          } else {
+            // 1-8 without Shift: exclusive single-track selection
+            s.clipboardSelectedTracks = s.clipboardSelectedTracks.map((_, i) =>
+              i === cbTrack
+            );
+          }
+          bumpUi();
+          return;
+        }
+
+        // Block all other unhandled actions in clipboard mode
+        return;
+      }
+
+      // ── Normal mode keyboard handlers ─────────────────────────────────────
 
       // Numpad5: set loop-selection start (keeps existing end if valid)
       if (e.code === 'Numpad5') {
@@ -1180,12 +1707,19 @@ export const MainOverviewPage: React.FC = () => {
     };
   }, [
     applySongScrollStep,
+    applyClipboardScrollStep,
     bumpUi,
+    exitClipboardMode,
+    getClipboardSongSecNow,
     getSongSecNow,
+    handleClipboardCutCopy,
+    handleClipboardPaste,
     handleCutCopy,
     handlePaste,
     handlePlayClick,
+    startClipboardPlayback,
     startPlayback,
+    stopAllClipboardSources,
     stopAllSources,
     toggleMuteImmediate,
     togglePendingOrCancel,
@@ -1244,7 +1778,28 @@ export const MainOverviewPage: React.FC = () => {
         }
       }
 
-      const scrollX = scrollXFromSongSec(songSec);
+      // ── Clipboard Overview Mode: update clipboard playhead ──────────────
+      let clipboardSec = s.clipboardSongSec;
+      if (s.clipboardMode && s.clipboardPlaying && actx) {
+        const elapsed = actx.currentTime - clipboardAnchorAudioTimeRef.current;
+        clipboardSec = clipboardAnchorSongSecRef.current + elapsed;
+        const dur = s.clipboardDurationSec;
+        if (dur > 0) {
+          while (clipboardSec >= dur) clipboardSec -= dur;
+          while (clipboardSec < 0) clipboardSec += dur;
+        }
+        s.clipboardSongSec = clipboardSec;
+      }
+
+      // ── Active display values (switch between song and clipboard mode) ───
+      const isClipMode = s.clipboardMode;
+      const displaySec = isClipMode ? clipboardSec : songSec;
+      const displayDuration = isClipMode ? s.clipboardDurationSec : SONG_DURATION_SEC;
+      const displayScrollX = displaySec * PIXELS_PER_SECOND - CURSOR_X;
+      const displayAmps = isClipMode ? s.clipboardAmplitudes : s.amplitudes;
+      const displayColCount = isClipMode ? s.clipboardColumnCount : COLUMN_COUNT;
+
+      const scrollX = displayScrollX;
       const w = VISIBLE_WIDTH;
       const nowPerf = performance.now();
       const blinkPhase = Math.floor((nowPerf / 1000) * BLINK_HZ) % 2 === 0;
@@ -1284,28 +1839,89 @@ export const MainOverviewPage: React.FC = () => {
         ctx2d.stroke();
       }
 
-      // ── Current section highlight in grid area ──────────────────────────
-      {
-        const section = getCurrentSection(songSec, s.userMarkerSongSec, SONG_DURATION_SEC);
-        const sx = section.startSec * PIXELS_PER_SECOND - scrollX;
-        const ex = section.endSec * PIXELS_PER_SECOND - scrollX;
-        ctx2d.fillStyle = 'rgba(255, 160, 52, 0.12)';
-        ctx2d.fillRect(sx, CMD_BAR_H, ex - sx, GRID_H);
+      if (!isClipMode) {
+        // ── Current section highlight in grid area (song mode only) ────────
+        {
+          const section = getCurrentSection(songSec, s.userMarkerSongSec, SONG_DURATION_SEC);
+          const sx = section.startSec * PIXELS_PER_SECOND - scrollX;
+          const ex = section.endSec * PIXELS_PER_SECOND - scrollX;
+          ctx2d.fillStyle = 'rgba(255, 160, 52, 0.12)';
+          ctx2d.fillRect(sx, CMD_BAR_H, ex - sx, GRID_H);
+        }
+
+        // ── Loop-selection highlight + flag triangles (song mode only) ─────
+        {
+          const loop = s.loopSelection;
+          if (loop && loop.endSec > loop.startSec + 1e-4) {
+            const sx = loop.startSec * PIXELS_PER_SECOND - scrollX;
+            const ex = loop.endSec * PIXELS_PER_SECOND - scrollX;
+            ctx2d.fillStyle = COLOR_LOOP_SELECTION;
+            ctx2d.fillRect(sx, CMD_BAR_H, ex - sx, GRID_H);
+            const triBase = 7;
+            const triH = 8;
+            const triY0 = CMD_BAR_H + 4;
+            ctx2d.fillStyle = COLOR_LOOP_SELECTION_MARKER;
+            ctx2d.beginPath();
+            ctx2d.moveTo(sx, triY0);
+            ctx2d.lineTo(sx + triBase, triY0 + triH / 2);
+            ctx2d.lineTo(sx, triY0 + triH);
+            ctx2d.closePath();
+            ctx2d.fill();
+            ctx2d.beginPath();
+            ctx2d.moveTo(ex, triY0);
+            ctx2d.lineTo(ex - triBase, triY0 + triH / 2);
+            ctx2d.lineTo(ex, triY0 + triH);
+            ctx2d.closePath();
+            ctx2d.fill();
+          }
+        }
+      } else {
+        // ── Clipboard selection highlight + flag triangles ───────────────────
+        {
+          const sel = s.clipboardSelection;
+          if (sel && sel.endSec > sel.startSec + 1e-4) {
+            const sx = sel.startSec * PIXELS_PER_SECOND - scrollX;
+            const ex = sel.endSec * PIXELS_PER_SECOND - scrollX;
+            // Tinted overlay
+            ctx2d.fillStyle = COLOR_CLIP_SELECTION;
+            ctx2d.fillRect(sx, CMD_BAR_H, ex - sx, GRID_H);
+            // Corner-filling right-angle triangles at start (top-left) and end (top-right), 12x12 px
+            const c = 12;
+            const ty = CMD_BAR_H;
+            ctx2d.fillStyle = COLOR_CLIP_SELECTION_MARKER;
+            // Start: fills top-left corner of selection
+            ctx2d.beginPath();
+            ctx2d.moveTo(sx, ty);
+            ctx2d.lineTo(sx + c, ty);
+            ctx2d.lineTo(sx, ty + c);
+            ctx2d.closePath();
+            ctx2d.fill();
+            // End: fills top-right corner of selection
+            ctx2d.beginPath();
+            ctx2d.moveTo(ex, ty);
+            ctx2d.lineTo(ex - c, ty);
+            ctx2d.lineTo(ex, ty + c);
+            ctx2d.closePath();
+            ctx2d.fill();
+          }
+        }
       }
 
-      // ── Loop-selection highlight in grid area ────────────────────────────
-      {
-        const loop = s.loopSelection;
-        if (loop && loop.endSec > loop.startSec + 1e-4) {
-          const sx = loop.startSec * PIXELS_PER_SECOND - scrollX;
-          const ex = loop.endSec * PIXELS_PER_SECOND - scrollX;
-          ctx2d.fillStyle = COLOR_LOOP_SELECTION;
-          ctx2d.fillRect(sx, CMD_BAR_H, ex - sx, GRID_H);
+      // ── Clipboard duration end marker (in clipboard mode) ────────────────
+      if (isClipMode && displayDuration > 0) {
+        const endX = displayDuration * PIXELS_PER_SECOND - scrollX;
+        if (endX >= -2 && endX <= w + 2) {
+          ctx2d.strokeStyle = '#ffaa00';
+          ctx2d.lineWidth = 1;
+          ctx2d.beginPath();
+          ctx2d.moveTo(endX + 0.5, CMD_BAR_H);
+          ctx2d.lineTo(endX + 0.5, TRACKS_Y0 + TRACK_COUNT * TRACK_H);
+          ctx2d.stroke();
         }
       }
 
       // ── Track lanes ─────────────────────────────────────────────────────
-      const amps = s.amplitudes;
+      const amps = displayAmps;
       for (let tr = 0; tr < TRACK_COUNT; tr++) {
         const y0 = TRACKS_Y0 + tr * TRACK_H;
         ctx2d.fillStyle = COLOR_LANE_BG;
@@ -1314,46 +1930,112 @@ export const MainOverviewPage: React.FC = () => {
         const centerY = y0 + Math.floor(TRACK_H / 2);
         const maxHalf = Math.floor(TRACK_H / 2) - 4;
 
-        const muted = s.muted[tr]!;
-        const sel = s.selectedTrack === tr;
-        const hasPending = s.pending.has(tr);
+        let baseColor: string;
+        if (isClipMode) {
+          // 4-state color model: has-audio × selected
+          const cbHasAudio = clipboardRef.current?.tracks.has(tr) ?? false;
+          const cbSel = s.clipboardSelectedTracks[tr] ?? false;
+          if (cbSel && cbHasAudio)       baseColor = COLOR_WAVE_SELECTED;
+          else if (cbSel && !cbHasAudio) baseColor = COLOR_WAVE_MUTED_SEL;
+          else if (cbHasAudio)           baseColor = COLOR_WAVE_NORMAL;
+          else                           baseColor = COLOR_WAVE_MUTED;
+        } else {
+          const muted = s.muted[tr]!;
+          const sel = s.selectedTrack === tr;
+          const hasPending = s.pending.has(tr);
+          baseColor = COLOR_WAVE_NORMAL;
+          if (sel && !muted) baseColor = COLOR_WAVE_SELECTED;
+          else if (sel && muted) baseColor = COLOR_WAVE_MUTED_SEL;
+          else if (muted) baseColor = COLOR_WAVE_MUTED;
 
-        let baseColor = COLOR_WAVE_NORMAL;
-        if (sel && !muted) baseColor = COLOR_WAVE_SELECTED;
-        else if (sel && muted) baseColor = COLOR_WAVE_MUTED_SEL;
-        else if (muted) baseColor = COLOR_WAVE_MUTED;
+          const inRejectBlink = rejectActive && rejectBlinkTracksRef.current.has(tr);
+          const waveformBlink = hasPending || inRejectBlink;
+          const blinkUse = inRejectBlink ? rejectPhase : blinkPhase;
 
-        const inRejectBlink = rejectActive && rejectBlinkTracksRef.current.has(tr);
-        const waveformBlink = hasPending || inRejectBlink;
-        const blinkUse = inRejectBlink ? rejectPhase : blinkPhase;
+          if (amps?.[tr]) {
+            const colStart = Math.max(0, Math.floor(scrollX / BAR_PITCH));
+            const colEnd = Math.min(displayColCount - 1, Math.ceil((scrollX + w) / BAR_PITCH));
+            const barW = 2;
 
-        if (amps?.[tr]) {
+            for (let col = colStart; col <= colEnd; col++) {
+              const sx = col * BAR_PITCH - scrollX;
+              if (sx + barW <= 0 || sx >= w) continue;
+              const amp = amps[tr]![col] ?? 0.02;
+              const hBar = Math.max(1, Math.min(maxHalf, Math.round(amp * maxHalf * 1.2)));
+
+              let fill = baseColor;
+              if (waveformBlink && blinkUse) {
+                fill =
+                  fill === COLOR_WAVE_SELECTED ? COLOR_WAVE_MUTED_SEL :
+                  fill === COLOR_WAVE_NORMAL   ? COLOR_WAVE_MUTED :
+                  fill === COLOR_WAVE_MUTED_SEL ? COLOR_WAVE_SELECTED :
+                  COLOR_WAVE_NORMAL;
+              }
+
+              ctx2d.fillStyle = fill;
+              ctx2d.fillRect(Math.floor(sx), centerY - 2 - hBar, barW, hBar);
+              ctx2d.fillRect(Math.floor(sx), centerY + 2, barW, hBar);
+            }
+          }
+
+          // Centerline drawn AFTER bars (song mode): always static baseColor.
+          const clY = centerY - 2;
+          ctx2d.fillStyle = baseColor;
+          const clColStart = Math.floor(scrollX / BAR_PITCH) - 1;
+          const clColEnd = Math.ceil((scrollX + w) / BAR_PITCH) + 1;
+          for (let col = clColStart; col <= clColEnd; col++) {
+            const clX = Math.floor(col * BAR_PITCH - scrollX);
+            if (clX + 2 <= 0 || clX >= w) continue;
+            ctx2d.fillRect(clX, clY, 2, 4);
+          }
+
+          // Upcoming sync-mute marker line (song mode only)
+          const pe = s.pending.get(tr);
+          if (s.syncMuteMode !== 'OFF' && pe) {
+            let rem: number;
+            if (s.playing && actx && pe.applyAtAudioTime !== null) {
+              rem = pe.applyAtAudioTime - actx.currentTime;
+            } else {
+              rem = playbackSecondsToBoundary(songSec, pe.boundarySongSec);
+            }
+            const mx = CURSOR_X + rem * PIXELS_PER_SECOND;
+            if (mx >= -2 && mx <= w + 2) {
+              ctx2d.strokeStyle = COLOR_SYNC_UPCOMING_MARKER;
+              ctx2d.lineWidth = 2;
+              ctx2d.beginPath();
+              ctx2d.moveTo(mx + 0.5, y0 + 1);
+              ctx2d.lineTo(mx + 0.5, y0 + TRACK_H - 2);
+              ctx2d.stroke();
+            }
+          }
+
+          // Lane separator
+          ctx2d.strokeStyle = '#112818';
+          ctx2d.lineWidth = 1;
+          ctx2d.beginPath();
+          ctx2d.moveTo(0, y0 + TRACK_H - 0.5);
+          ctx2d.lineTo(w, y0 + TRACK_H - 0.5);
+          ctx2d.stroke();
+          continue; // song mode track done
+        }
+
+        // Clipboard mode track rendering — only draw amplitude bars if the track has audio
+        if ((clipboardRef.current?.tracks.has(tr) ?? false) && amps?.[tr]) {
           const colStart = Math.max(0, Math.floor(scrollX / BAR_PITCH));
-          const colEnd = Math.min(COLUMN_COUNT - 1, Math.ceil((scrollX + w) / BAR_PITCH));
+          const colEnd = Math.min(displayColCount - 1, Math.ceil((scrollX + w) / BAR_PITCH));
           const barW = 2;
-
           for (let col = colStart; col <= colEnd; col++) {
             const sx = col * BAR_PITCH - scrollX;
             if (sx + barW <= 0 || sx >= w) continue;
             const amp = amps[tr]![col] ?? 0.02;
             const hBar = Math.max(1, Math.min(maxHalf, Math.round(amp * maxHalf * 1.2)));
-
-            let fill = baseColor;
-            if (waveformBlink && blinkUse) {
-              fill =
-                fill === COLOR_WAVE_SELECTED ? COLOR_WAVE_MUTED_SEL :
-                fill === COLOR_WAVE_NORMAL   ? COLOR_WAVE_MUTED :
-                fill === COLOR_WAVE_MUTED_SEL ? COLOR_WAVE_SELECTED :
-                COLOR_WAVE_NORMAL;
-            }
-
-            ctx2d.fillStyle = fill;
+            ctx2d.fillStyle = baseColor;
             ctx2d.fillRect(Math.floor(sx), centerY - 2 - hBar, barW, hBar);
             ctx2d.fillRect(Math.floor(sx), centerY + 2, barW, hBar);
           }
         }
 
-        // Centerline drawn AFTER bars: always static baseColor, never blinks.
+        // Centerline (clipboard mode)
         const clY = centerY - 2;
         ctx2d.fillStyle = baseColor;
         const clColStart = Math.floor(scrollX / BAR_PITCH) - 1;
@@ -1362,26 +2044,6 @@ export const MainOverviewPage: React.FC = () => {
           const clX = Math.floor(col * BAR_PITCH - scrollX);
           if (clX + 2 <= 0 || clX >= w) continue;
           ctx2d.fillRect(clX, clY, 2, 4);
-        }
-
-        // Upcoming sync-mute marker line
-        const pe = s.pending.get(tr);
-        if (s.syncMuteMode !== 'OFF' && pe) {
-          let rem: number;
-          if (s.playing && actx && pe.applyAtAudioTime !== null) {
-            rem = pe.applyAtAudioTime - actx.currentTime;
-          } else {
-            rem = playbackSecondsToBoundary(songSec, pe.boundarySongSec);
-          }
-          const mx = CURSOR_X + rem * PIXELS_PER_SECOND;
-          if (mx >= -2 && mx <= w + 2) {
-            ctx2d.strokeStyle = COLOR_SYNC_UPCOMING_MARKER;
-            ctx2d.lineWidth = 2;
-            ctx2d.beginPath();
-            ctx2d.moveTo(mx + 0.5, y0 + 1);
-            ctx2d.lineTo(mx + 0.5, y0 + TRACK_H - 2);
-            ctx2d.stroke();
-          }
         }
 
         // Lane separator
@@ -1401,37 +2063,39 @@ export const MainOverviewPage: React.FC = () => {
       ctx2d.lineTo(CURSOR_X + 0.5, TRACKS_Y0 + TRACK_COUNT * TRACK_H);
       ctx2d.stroke();
 
-      // ── Timeline marker triangles ────────────────────────────────────────
-      const drawTimelineTriangle = (screenX: number, alpha: number) => {
-        const sx = Math.round(screenX);
-        if (sx < -14 || sx > w + 14) return;
-        ctx2d.save();
-        ctx2d.globalAlpha = alpha;
-        ctx2d.fillStyle = COLOR_TRIANGLE;
-        ctx2d.beginPath();
-        ctx2d.moveTo(sx - 12, CMD_BAR_H + 2);
-        ctx2d.lineTo(sx + 12, CMD_BAR_H + 2);
-        ctx2d.lineTo(sx, CMD_BAR_H + 14);
-        ctx2d.closePath();
-        ctx2d.fill();
-        ctx2d.restore();
-      };
+      if (!isClipMode) {
+        // ── Timeline marker triangles (song mode only) ─────────────────────
+        const drawTimelineTriangle = (screenX: number, alpha: number) => {
+          const sx = Math.round(screenX);
+          if (sx < -14 || sx > w + 14) return;
+          ctx2d.save();
+          ctx2d.globalAlpha = alpha;
+          ctx2d.fillStyle = COLOR_TRIANGLE;
+          ctx2d.beginPath();
+          ctx2d.moveTo(sx - 12, CMD_BAR_H + 2);
+          ctx2d.lineTo(sx + 12, CMD_BAR_H + 2);
+          ctx2d.lineTo(sx, CMD_BAR_H + 14);
+          ctx2d.closePath();
+          ctx2d.fill();
+          ctx2d.restore();
+        };
 
-      const tp = timelinePointerRef.current;
-      const dragSrc = markerDragSourceSecRef.current;
-      const dragGhost = markerDragGhostSecRef.current;
-      const draggingUser =
-        tp !== null && tp.kind === 'userMarker' && tp.dragActive && dragSrc !== null;
+        const tp = timelinePointerRef.current;
+        const dragSrc = markerDragSourceSecRef.current;
+        const dragGhost = markerDragGhostSecRef.current;
+        const draggingUser =
+          tp !== null && tp.kind === 'userMarker' && tp.dragActive && dragSrc !== null;
 
-      const markerList = getAllMarkersSorted(s.userMarkerSongSec);
-      for (const m of markerList) {
-        if (draggingUser && Math.abs(m - dragSrc!) < 1e-4) continue;
-        const mx = m * PIXELS_PER_SECOND - scrollX;
-        drawTimelineTriangle(mx, 1);
-      }
-      if (draggingUser && dragGhost !== null) {
-        const gx = dragGhost * PIXELS_PER_SECOND - scrollX;
-        drawTimelineTriangle(gx, 0.5);
+        const markerList = getAllMarkersSorted(s.userMarkerSongSec);
+        for (const m of markerList) {
+          if (draggingUser && Math.abs(m - dragSrc!) < 1e-4) continue;
+          const mx = m * PIXELS_PER_SECOND - scrollX;
+          drawTimelineTriangle(mx, 1);
+        }
+        if (draggingUser && dragGhost !== null) {
+          const gx = dragGhost * PIXELS_PER_SECOND - scrollX;
+          drawTimelineTriangle(gx, 0.5);
+        }
       }
 
       // ── Bottom status bar ────────────────────────────────────────────────
@@ -1448,8 +2112,18 @@ export const MainOverviewPage: React.FC = () => {
       ctx2d.textBaseline = 'middle';
       const barMidY = BOTTOM_BAR_Y + BOTTOM_BAR_H / 2;
 
-      if (s.shiftDown) {
-        // Show track numbers with mute-state colors (visible while SHIFT held)
+      if (s.shiftDown && isClipMode) {
+        // Clipboard mode + SHIFT: show track numbers with selection colors
+        ctx2d.font = '20px Monogram, monospace';
+        ctx2d.textAlign = 'center';
+        for (let tr = 0; tr < TRACK_COUNT; tr++) {
+          const cx = ((tr + 0.5) / TRACK_COUNT) * w;
+          const cbSel = s.clipboardSelectedTracks[tr];
+          ctx2d.fillStyle = cbSel ? COLOR_WAVE_SELECTED : COLOR_LABEL_UNMUTED;
+          ctx2d.fillText(String(tr + 1), cx, barMidY);
+        }
+      } else if (s.shiftDown && !isClipMode) {
+        // Song mode + SHIFT: show track numbers with mute-state colors
         ctx2d.font = '20px Monogram, monospace';
         ctx2d.textAlign = 'center';
         for (let tr = 0; tr < TRACK_COUNT; tr++) {
@@ -1485,12 +2159,12 @@ export const MainOverviewPage: React.FC = () => {
           ctx2d.fillRect(squaresStartX + i * (squareSize + squareGap), squareY, squareSize, squareSize);
         }
 
-        const totalSecInt = Math.floor(songSec);
-        const mm = Math.floor(totalSecInt / 60).toString().padStart(2, '0');
-        const ss = (totalSecInt % 60).toString().padStart(2, '0');
+        const dispSecInt = Math.floor(displaySec);
+        const mm = Math.floor(dispSecInt / 60).toString().padStart(2, '0');
+        const ss = (dispSecInt % 60).toString().padStart(2, '0');
         const tStr = `T ${mm}:${ss}`;
 
-        const totalBeats = Math.floor(songSec / beatDur);
+        const totalBeats = Math.floor(displaySec / beatDur);
         const bar = Math.floor(totalBeats / BEATS_PER_BAR);
         const beat = (totalBeats % BEATS_PER_BAR) + 1;
         const bStr = `B ${bar.toString().padStart(2, '0')}:${beat.toString().padStart(2, '0')}`;
@@ -1500,6 +2174,12 @@ export const MainOverviewPage: React.FC = () => {
         ctx2d.textAlign = 'center';
         ctx2d.fillText(tStr, 480, barMidY);
         ctx2d.fillText(bStr, 680, barMidY);
+
+        // Mode label bottom-left: orange "CLIPBOARD" vs "AUDIO"
+        ctx2d.font = '20px Monogram, monospace';
+        ctx2d.textAlign = 'left';
+        ctx2d.fillStyle = '#ffaa00';
+        ctx2d.fillText(isClipMode ? 'CLIPBOARD' : 'AUDIO', 8, barMidY);
       }
 
       // ── CMD bar text (drawn last, stays on top) ──────────────────────────
@@ -1511,6 +2191,13 @@ export const MainOverviewPage: React.FC = () => {
       ctx2d.fillText(s.stepDivision, 8, cmdMidY);
       ctx2d.textAlign = 'right';
       ctx2d.fillText('SCROLL', w - 8, cmdMidY);
+
+      // ── Clipboard Mode: orange 2px outline around entire viewport ────────
+      if (isClipMode) {
+        ctx2d.strokeStyle = '#ffaa00';
+        ctx2d.lineWidth = 2;
+        ctx2d.strokeRect(1, 1, VISIBLE_WIDTH - 2, VISIBLE_HEIGHT - 2);
+      }
 
       // Load error overlay
       if (s.loadError) {
@@ -1531,8 +2218,8 @@ export const MainOverviewPage: React.FC = () => {
   }, [applyGainImmediate, bumpUi]);
 
   const s = stateRef.current;
-  const canUndo = undoStackRef.current.length > 0;
-  const canRedo = redoEntryRef.current !== null;
+  const canUndo = undoStackRef.current.length > 0 && !s.clipboardMode;
+  const canRedo = redoEntryRef.current !== null && !s.clipboardMode;
 
   return (
     <div className="app-container" data-ui-revision={uiTick}>
@@ -1648,17 +2335,39 @@ export const MainOverviewPage: React.FC = () => {
       </div>
 
       {transientToast !== null ? (
-        <div className="transient-toast-overlay" role="alert" aria-live="assertive">
-          <div className="transient-toast-box">{transientToast}</div>
+        <div
+          className="transient-toast-overlay"
+          role={transientToast.variant === 'error' ? 'alert' : 'status'}
+          aria-live={transientToast.variant === 'error' ? 'assertive' : 'polite'}
+        >
+          <div
+            className={
+              transientToast.variant === 'success'
+                ? 'transient-toast-box transient-toast-box--success'
+                : 'transient-toast-box'
+            }
+          >
+            {transientToast.message}
+          </div>
         </div>
       ) : null}
 
-      <div className="instructions">
-        <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>ARROW-Keys or Mousewheel </strong>: ⏪︎ ⏩︎ scroll by step-size &ndash; <strong>SHIFT+LEFT</strong>: ⏮ song start. &ndash; <strong>SHIFT + 1–8</strong>: mute/unmute (synced to bar while playing)<br />
-        <strong>Numpad 7 or Mouseclick in Grid-Bar</strong> set ▼ marker (<strong>mouse-drag</strong> to move;  <strong>Shift+Numpad 7</strong> clear all). &ndash; <strong>F1</strong>–<strong>F9</strong>: Set step size (4/1, … 1/2, … 1/64).<br />
-        <strong>Numpad 8</strong>: CUT segment &ndash; <strong>Numpad 9</strong>: COPY segment &ndash; <strong>Numpad Minus</strong>: PASTE &ndash; <strong>Shift+CUT/COPY</strong>: cut or copy all unmuted tracks.<br />
-        <strong>Numpad 5</strong>: set loop start &ndash; <strong>Numpad 6</strong>: set loop end (cyan overlay; playhead wraps at end). Set loop end at time&nbsp;0 to clear.
-      </div>
+      {s.clipboardMode ? (
+        <div className="instructions">
+          <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>ARROW-Keys or Mousewheel</strong>: ⏪︎ ⏩︎ scroll by step-size &ndash; <strong>SHIFT+LEFT</strong>: ⏮ clipboard  start. &ndash; <strong>1–8</strong>: select track &ndash; <strong>SHIFT + 1–8</strong>: toggle multi-select<br />
+          <strong>Numpad 8</strong>: CUT selection &ndash; <strong>Numpad 9</strong>: COPY selection &ndash; <strong>Numpad Minus</strong>: PASTE &ndash; <strong>F1</strong>–<strong>F9</strong>: Set step size (4/1, … 1/2, … 1/64).<br />
+          <strong>Numpad 5</strong>: set selection start &ndash; <strong>Numpad 6</strong>: set selection end (cyan overlay; narrows range for clipboard modifier operations). To <strong>clear selection</strong>, set start = end.<br />
+          Click <strong> ◻◻◻◻◻◻◻◻ </strong> to exit
+        </div>
+      ) : (
+        <div className="instructions">
+          <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>ARROW-Keys or Mousewheel </strong>: ⏪︎ ⏩︎ scroll by step-size &ndash; <strong>SHIFT+LEFT</strong>: ⏮ song start. &ndash; <strong>SHIFT + 1–8</strong>: mute/unmute (synced to bar while playing)<br />
+          <strong>Numpad 7 or Mouseclick in Grid-Bar</strong> set ▼ marker (<strong>mouse-drag</strong> to move;  <strong>Shift+Numpad 7</strong> clear all). &ndash; <strong>F1</strong>–<strong>F9</strong>: Set step size (4/1, … 1/2, … 1/64).<br />
+          <strong>Numpad 8</strong>: CUT segment &ndash; <strong>Numpad 9</strong>: COPY segment &ndash; <strong>Numpad Minus</strong>: PASTE &ndash; <strong>Shift+CUT/COPY</strong>: cut or copy all unmuted tracks.<br />
+          <strong>Numpad 5</strong>: set loop start &ndash; <strong>Numpad 6</strong>: set loop end (cyan overlay; playhead wraps at end). Set loop end at time&nbsp;0 to clear.<br />
+          Click <strong> ◻◻◻◻◻◻◻◻ </strong> to open <strong>Clipboard Overview</strong>
+        </div>
+      )}
     </div>
   );
 };
