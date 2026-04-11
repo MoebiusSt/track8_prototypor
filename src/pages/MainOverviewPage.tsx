@@ -56,6 +56,10 @@ const BLINK_HZ = 4;
 const REJECT_BLINK_HZ = 11;
 const TIMELINE_DRAG_THRESHOLD_PX = 6;
 
+// Clipboard Speed modifier — musical ratios (index 3 = x1.0 neutral)
+const CB_SPEED_RATIOS: readonly number[] = [1 / 3, 0.5, 0.75, 1.0, 4 / 3, 1.5, 1.75, 2.0];
+const CB_SPEED_NEUTRAL_IDX = 3;
+
 // 8 minutes combined audio budget (in seconds * tracks)
 const UNDO_BUDGET_SEC = 480;
 const ERROR_COPY_MAX_LENGTH_MSG =
@@ -414,6 +418,7 @@ interface DrawState {
   clipboardDurationSec: number;
   cbModVolDb: number;
   cbModPan: number;
+  cbModSpeedIdx: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +482,7 @@ export const MainOverviewPage: React.FC = () => {
     clipboardDurationSec: 0,
     cbModVolDb: 0,
     cbModPan: 0,
+    cbModSpeedIdx: CB_SPEED_NEUTRAL_IDX,
   });
 
   const [uiTick, setUiTick] = useState(0);
@@ -999,6 +1005,79 @@ export const MainOverviewPage: React.FC = () => {
     bumpUi();
   }, [recomputeClipboardTrackAmplitudes, bumpUi, showTransientToast]);
 
+  const handleClipboardSpeed = useCallback((speedIdx: number) => {
+    if (speedIdx === CB_SPEED_NEUTRAL_IDX) return;
+    const clip = clipboardRef.current;
+    const bufs = clipboardBuffersRef.current;
+    const s = stateRef.current;
+    const ctx = audioCtxRef.current;
+    if (!clip || !bufs || !ctx) return;
+    const { targetTracks, startSec, endSec } = getClipboardTargets(s, clip);
+    if (targetTracks.length === 0) return;
+
+    const ratio = CB_SPEED_RATIOS[speedIdx]!;
+
+    for (const ti of targetTracks) {
+      const buf = bufs[ti];
+      if (!buf) continue;
+      const sr = buf.sampleRate;
+      const sStart = Math.floor(startSec * sr);
+      const sEnd = Math.min(Math.floor(endSec * sr), buf.length);
+      const srcLen = sEnd - sStart;
+      if (srcLen <= 0) continue;
+      const dstLen = Math.max(1, Math.round(srcLen / ratio));
+      const newTotalLen = buf.length - srcLen + dstLen;
+      const numCh = buf.numberOfChannels;
+      const newBuf = ctx.createBuffer(numCh, newTotalLen, sr);
+
+      for (let ch = 0; ch < numCh; ch++) {
+        const srcData = buf.getChannelData(ch);
+        const dstData = newBuf.getChannelData(ch);
+        // Copy pre-selection unchanged
+        dstData.set(srcData.subarray(0, sStart), 0);
+        // Resample selection
+        for (let i = 0; i < dstLen; i++) {
+          const srcIdx = Math.min(Math.round(i * ratio), srcLen - 1);
+          dstData[sStart + i] = srcData[sStart + srcIdx]!;
+        }
+        // Copy post-selection unchanged
+        const postSrc = srcData.subarray(sEnd);
+        dstData.set(postSrc, sStart + dstLen);
+      }
+
+      // Replace AudioBuffer
+      bufs[ti] = newBuf;
+
+      // Rebuild Float32Array channels in clipboardRef
+      const cbChannels = clip.tracks.get(ti);
+      if (cbChannels) {
+        const newChannels: Float32Array[] = Array.from({ length: numCh }, (_, ch) => {
+          const arr = new Float32Array(newTotalLen);
+          arr.set(newBuf.getChannelData(ch));
+          return arr;
+        });
+        clip.tracks.set(ti, newChannels);
+      }
+    }
+
+    // Recalculate duration from longest buffer
+    const sampleRate = bufs.find(Boolean)?.sampleRate ?? 44100;
+    const longestLen = bufs.reduce((mx, b) => Math.max(mx, b.length), 0);
+    s.clipboardDurationSec = longestLen / sampleRate;
+    clip.durationSec = s.clipboardDurationSec;
+
+    // Recompute column count then amplitudes
+    s.clipboardColumnCount = computeClipboardColumnCount(s.clipboardDurationSec);
+    for (const ti of targetTracks) {
+      recomputeClipboardTrackAmplitudes(ti);
+    }
+
+    const ratio2 = CB_SPEED_RATIOS[speedIdx]!;
+    const label = speedIdx === CB_SPEED_NEUTRAL_IDX ? 'x1.0' : `x${ratio2.toFixed(2)}`;
+    showTransientToast(`Speed: ${label}`, { durationMs: COMMAND_TOAST_MS, variant: 'success' });
+    bumpUi();
+  }, [recomputeClipboardTrackAmplitudes, bumpUi, showTransientToast]);
+
   const applyClipboardScrollStep = useCallback((sign: -1 | 1) => {
     const s = stateRef.current;
     const dur = s.clipboardDurationSec;
@@ -1368,6 +1447,7 @@ export const MainOverviewPage: React.FC = () => {
     s.clipboardDurationSec = clip.durationSec;
     s.cbModVolDb = 0;
     s.cbModPan = 0;
+    s.cbModSpeedIdx = CB_SPEED_NEUTRAL_IDX;
     cbInternalClipRef.current = null;
     bumpUi();
   }, [pausePlayback, bumpUi]);
@@ -1447,6 +1527,11 @@ export const MainOverviewPage: React.FC = () => {
             // REVERSE: execute immediately
             handleClipboardReverse();
             e.preventDefault();
+          } else if (slot === 5) {
+            // SPEED drag-to-set
+            cbModDragRef.current = { pointerId: e.pointerId, slot: 5, startClientX: e.clientX, startValue: s.cbModSpeedIdx };
+            canvas.setPointerCapture(e.pointerId);
+            e.preventDefault();
           }
         }
         return;
@@ -1483,7 +1568,7 @@ export const MainOverviewPage: React.FC = () => {
       canvas.setPointerCapture(e.pointerId);
       e.preventDefault();
     },
-    [getSongSecNow, enterClipboardMode, exitClipboardMode, handleClipboardFade, handleClipboardReverse]
+    [getSongSecNow, enterClipboardMode, exitClipboardMode, handleClipboardFade, handleClipboardReverse, handleClipboardSpeed]
   );
 
   const onTimelinePointerMove = useCallback(
@@ -1498,6 +1583,9 @@ export const MainOverviewPage: React.FC = () => {
         } else if (drag.slot === 2) {
           const raw = Math.round((drag.startValue + deltaX / 2) / 10) * 10;
           s.cbModPan = Math.max(-100, Math.min(100, raw));
+        } else if (drag.slot === 5) {
+          const newIdx = Math.max(0, Math.min(CB_SPEED_RATIOS.length - 1, Math.round(drag.startValue + deltaX / 20)));
+          s.cbModSpeedIdx = newIdx;
         }
         bumpUi();
         return;
@@ -1533,6 +1621,7 @@ export const MainOverviewPage: React.FC = () => {
           const clipS = stateRef.current;
           if (drag.slot === 1 && clipS.cbModVolDb !== 0) handleClipboardVol(clipS.cbModVolDb);
           else if (drag.slot === 2 && clipS.cbModPan !== 0) handleClipboardPan(clipS.cbModPan);
+          else if (drag.slot === 5 && clipS.cbModSpeedIdx !== CB_SPEED_NEUTRAL_IDX) handleClipboardSpeed(clipS.cbModSpeedIdx);
         }
         return;
       }
@@ -1594,7 +1683,7 @@ export const MainOverviewPage: React.FC = () => {
       stateRef.current.userMarkerSongSec = [...u, snapped].sort((a, b) => a - b);
       bumpUi();
     },
-    [getSongSecNow, bumpUi, handleClipboardVol, handleClipboardPan]
+    [getSongSecNow, bumpUi, handleClipboardVol, handleClipboardPan, handleClipboardSpeed]
   );
 
   // Audio loading
@@ -2460,6 +2549,10 @@ export const MainOverviewPage: React.FC = () => {
         ctx2d.fillText(s.shiftDown ? 'FADE IN' : 'FADE OUT', slotW * 3.5, cmdMidY);
         // Slot 5 — REVERSE
         ctx2d.fillText('REVERSE', slotW * 4.5, cmdMidY);
+        // Slot 6 — SPEED
+        const speedRatio = CB_SPEED_RATIOS[s.cbModSpeedIdx]!;
+        const speedLabel = s.cbModSpeedIdx === CB_SPEED_NEUTRAL_IDX ? 'x1.0' : `x${speedRatio.toFixed(2)}`;
+        ctx2d.fillText(speedLabel, slotW * 5.5, cmdMidY);
       }
 
       // ── Clipboard Mode: orange 2px outline around entire viewport ────────
@@ -2626,16 +2719,19 @@ export const MainOverviewPage: React.FC = () => {
         <div className="instructions">
           <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>ARROW-Keys or Mousewheel</strong>: ⏪︎ ⏩︎ scroll by step-size &ndash; <strong>Escape</strong>: exit Clipboard Overview &ndash; <strong>1–8</strong>: select track (exclusive) &ndash; <strong>SHIFT + 1–8</strong>: toggle multi-select<br />
           <strong>Numpad 8</strong>: CUT selection &ndash; <strong>Numpad 9</strong>: COPY selection &ndash; <strong>Numpad Minus</strong>: PASTE &ndash; <strong>F1</strong>–<strong>F9</strong>: Set step size (4/1, … 1/2, … 1/64).<br />
-          <strong>Numpad 5</strong>: set selection start &ndash; <strong>Numpad 6</strong>: set selection end (cyan overlay; narrows range for modifier operations). Set start = end to clear.<br />
-          <strong>Modifier actions (CMD-bar):</strong> drag <strong>0 dB</strong> to set volume reduction, click to apply &ndash; drag <strong>0 LR</strong> to set pan, click to apply &ndash; click <strong>FADE OUT</strong> (hold SHIFT for FADE IN) &ndash; click <strong>REVERSE</strong>. All act on selected tracks / selection range. Click <strong>◻◻◻◻◻◻◻◻</strong> to exit.
+          <strong>Numpad 5</strong>: set selection start &ndash; <strong>Numpad 6</strong>: set selection end (cyan overlay; narrows range for modifier operations). Set start = end to clear.<br /><br />
+          <strong>Modifier actions (CMD-bar): All modifier actions apply immediatly on click on selected tracks/selection-range. <br />
+          </strong> Vol: drag <strong>0 dB</strong> to set volume reduction &ndash; Pan: drag <strong>0 LR</strong> to set pan &ndash; Fade: click <strong>FADE OUT</strong> (hold SHIFT for FADE IN) &ndash; Reverse: click <strong>REVERSE</strong> &ndash; Speed: drag <strong>x 1.0</strong> to set speedratio.<br />
+          
+          Click <strong>(◻◻◻◻◻◻◻◻)</strong> to exit <strong>Clipboard Overview</strong>.
         </div>
       ) : (
         <div className="instructions">
           <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>ARROW-Keys or Mousewheel </strong>: ⏪︎ ⏩︎ scroll by step-size &ndash; <strong>SHIFT+LEFT</strong>: ⏮ song start. &ndash; <strong>SHIFT + 1–8</strong>: mute/unmute (synced to bar while playing)<br />
           <strong>Numpad 7 or Mouseclick in Grid-Bar</strong> set ▼ marker (<strong>mouse-drag</strong> to move;  <strong>Shift+Numpad 7</strong> clear all). &ndash; <strong>F1</strong>–<strong>F9</strong>: Set step size (4/1, … 1/2, … 1/64).<br />
           <strong>Numpad 8</strong>: CUT segment &ndash; <strong>Numpad 9</strong>: COPY segment &ndash; <strong>Numpad Minus</strong>: PASTE &ndash; <strong>Shift+CUT/COPY</strong>: cut or copy all unmuted tracks.<br />
-          <strong>Numpad 5</strong>: set loop start &ndash; <strong>Numpad 6</strong>: set loop end (green overlay; playhead warps at end). Set loop end at time&nbsp;0 to clear.<br />
-          Click <strong> ◻◻◻◻◻◻◻◻ </strong> to open <strong>Clipboard Overview</strong>
+          <strong>Numpad 5</strong>: set loop start &ndash; <strong>Numpad 6</strong>: set loop end (green overlay; playhead wraps at end. Set loop-end to 0 to clear).<br />
+          Click <strong> (◻◻◻◻◻◻◻◻) </strong> to open <strong>Clipboard Overview</strong>.
         </div>
       )}
     </div>
