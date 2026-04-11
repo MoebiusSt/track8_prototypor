@@ -1124,8 +1124,7 @@ export const MainOverviewPage: React.FC = () => {
     } else {
       next = Math.ceil(now / delta) * delta;
     }
-    while (next < 0) next += SONG_DURATION_SEC;
-    while (next >= SONG_DURATION_SEC) next -= SONG_DURATION_SEC;
+    next = Math.max(0, Math.min(SONG_DURATION_SEC - 1e-6, next));
     s.songSec = next;
     if (s.playing) {
       stopAllSources();
