@@ -284,7 +284,7 @@ export const MainOverviewPage: React.FC = () => {
     userMarkerSongSec: [],
     amplitudes: null,
     loadError: null,
-    stepDivision: '1/64',
+    stepDivision: '1/4',
   });
 
   const [uiTick, setUiTick] = useState(0);
@@ -657,7 +657,19 @@ export const MainOverviewPage: React.FC = () => {
         }
         const delta = stepDivisionToSec(s.stepDivision);
         const sign = e.key === 'ArrowLeft' ? -1 : 1;
-        let next = getSongSecNow() + sign * delta;
+        const now = getSongSecNow();
+        // Re-align to the nearest grid point IN THE DIRECTION of movement before stepping.
+        // "Already aligned" uses a 1ms tolerance to absorb float drift.
+        const nearestGrid = Math.round(now / delta) * delta;
+        const isAligned = Math.abs(now - nearestGrid) < 1e-3;
+        let next: number;
+        if (isAligned) {
+          next = now + sign * delta;
+        } else if (sign < 0) {
+          next = Math.floor(now / delta) * delta; // leftward: snap to grid left of cursor
+        } else {
+          next = Math.ceil(now / delta) * delta;  // rightward: snap to grid right of cursor
+        }
         while (next < 0) next += SONG_DURATION_SEC;
         while (next >= SONG_DURATION_SEC) next -= SONG_DURATION_SEC;
         s.songSec = next;
@@ -910,9 +922,6 @@ export const MainOverviewPage: React.FC = () => {
         ctx2d.fill();
         ctx2d.restore();
       };
-
-      // Playhead triangle at CURSOR_X
-      drawTimelineTriangle(CURSOR_X, 1);
 
       const tp = timelinePointerRef.current;
       const dragSrc = markerDragSourceSecRef.current;
