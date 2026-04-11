@@ -230,6 +230,59 @@ body {
   opacity: 0.7;
 }
 
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.edit-action-btn {
+  color: #aaa;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #333;
+  background-color: #151515;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.edit-action-btn:hover:not(:disabled) {
+  color: #fff;
+  border-color: #555;
+}
+
+.edit-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* MainOverviewPage: transient error toast (replaces browser alert) */
+.transient-toast-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.transient-toast-box {
+  pointer-events: none;
+  max-width: min(560px, 92vw);
+  padding: 18px 24px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.35;
+  color: #ffb8b8;
+  background: #1a0a0a;
+  border: 1px solid #cc3333;
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
 .instructions {
   color: #888;
   font-size: 15px;

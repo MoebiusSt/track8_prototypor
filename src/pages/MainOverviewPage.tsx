@@ -42,9 +42,16 @@ const COLOR_LABEL_UNMUTED = '#ffaa00';
 const COLOR_LABEL_MUTED = '#664400';
 const COLOR_CMD_TEXT = '#ffa034';
 const COLOR_BOTTOM_SQUARE = '#664400';
+const COLOR_BOTTOM_SQUARE_FILLED = '#ffaa00';
 const BLINK_HZ = 4;
 const REJECT_BLINK_HZ = 11;
 const TIMELINE_DRAG_THRESHOLD_PX = 6;
+
+// 8 minutes combined audio budget (in seconds * tracks)
+const UNDO_BUDGET_SEC = 480;
+const ERROR_COPY_MAX_LENGTH_MSG =
+  'ERROR Maximum Copy length : 8 minutes (combined).';
+const TRANSIENT_TOAST_MS = 1700;
 
 type StepDivision = '4/1' | '2/1' | '1/1' | '1/2' | '1/4' | '1/8' | '1/16' | '1/32' | '1/64';
 const STEP_DIVISIONS: StepDivision[] = [
@@ -123,6 +130,22 @@ function getAllMarkersSorted(userMarkerSongSec: number[]): number[] {
   const u = userMarkerSongSec.filter((t) => t > 1e-6 && t < SONG_DURATION_SEC - 1e-6);
   const set = new Set<number>([0, ...u]);
   return Array.from(set).sort((a, b) => a - b);
+}
+
+function getCurrentSection(
+  playheadSec: number,
+  userMarkers: number[],
+  songEndSec: number
+): { startSec: number; endSec: number } {
+  const sorted = [...getAllMarkersSorted(userMarkers), songEndSec];
+  let startSec = 0;
+  let endSec = songEndSec;
+  for (let i = 0; i < sorted.length; i++) {
+    const m = sorted[i]!;
+    if (m <= playheadSec + 1e-6) startSec = m;
+    if (m > playheadSec + 1e-6) { endSec = m; break; }
+  }
+  return { startSec, endSec };
 }
 
 function computeSafeSyncApply(
@@ -233,6 +256,46 @@ function isShiftCode(code: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Audio manipulation helpers (pure, operate on AudioBuffer channel data)
+// ---------------------------------------------------------------------------
+
+function extractAudioSection(buffer: AudioBuffer, startSec: number, endSec: number): Float32Array[] {
+  const sr = buffer.sampleRate;
+  const startSample = Math.floor(startSec * sr);
+  const endSample = Math.min(buffer.length, Math.floor(endSec * sr));
+  const len = Math.max(0, endSample - startSample);
+  const result: Float32Array[] = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const src = buffer.getChannelData(ch);
+    const out = new Float32Array(len);
+    out.set(src.subarray(startSample, startSample + len));
+    result.push(out);
+  }
+  return result;
+}
+
+function silenceAudioSection(buffer: AudioBuffer, startSec: number, endSec: number): void {
+  const sr = buffer.sampleRate;
+  const startSample = Math.floor(startSec * sr);
+  const endSample = Math.min(buffer.length, Math.floor(endSec * sr));
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const data = buffer.getChannelData(ch);
+    data.fill(0, startSample, endSample);
+  }
+}
+
+function overwriteAudioSection(buffer: AudioBuffer, startSec: number, channelData: Float32Array[]): void {
+  const sr = buffer.sampleRate;
+  const startSample = Math.floor(startSec * sr);
+  for (let ch = 0; ch < Math.min(buffer.numberOfChannels, channelData.length); ch++) {
+    const dest = buffer.getChannelData(ch);
+    const src = channelData[ch]!;
+    const len = Math.min(src.length, dest.length - startSample);
+    if (len > 0) dest.set(src.subarray(0, len), startSample);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -240,6 +303,26 @@ interface PendingSyncEntry {
   targetMuted: boolean;
   boundarySongSec: number;
   applyAtAudioTime: number | null;
+}
+
+interface ClipboardData {
+  // trackIndex -> per-channel Float32Array
+  tracks: Map<number, Float32Array[]>;
+  sampleRate: number;
+  durationSec: number;
+}
+
+interface UndoRestoration {
+  trackIndex: number;
+  startSample: number;
+  channels: Float32Array[];
+}
+
+interface UndoEntry {
+  type: 'cut' | 'paste';
+  restorations: UndoRestoration[];
+  durationSec: number;
+  sampleRate: number;
 }
 
 interface DrawState {
@@ -271,6 +354,10 @@ export const MainOverviewPage: React.FC = () => {
   const anchorAudioTimeRef = useRef(0);
   const anchorSongSecRef = useRef(0);
 
+  const clipboardRef = useRef<ClipboardData | null>(null);
+  const undoStackRef = useRef<UndoEntry[]>([]);
+  const redoEntryRef = useRef<UndoEntry | null>(null);
+
   const stateRef = useRef<DrawState>({
     songSec: 0,
     playing: false,
@@ -289,9 +376,15 @@ export const MainOverviewPage: React.FC = () => {
 
   const [uiTick, setUiTick] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
+  const [transientToast, setTransientToast] = useState<string | null>(null);
+  const transientToastTimerRef = useRef<number>(0);
 
   const rejectBlinkEndMsRef = useRef(0);
   const rejectBlinkTracksRef = useRef<Set<number>>(new Set());
+  // Debounced shift-release timer: Windows fires a phantom ShiftLeft keyup when
+  // Shift+Numpad is pressed (NumLock toggle). We delay the shiftDown reset and
+  // cancel it if a Numpad keydown arrives within the window.
+  const shiftResetTimerRef = useRef<number>(0);
 
   const markerDragGhostSecRef = useRef<number | null>(null);
   const markerDragSourceSecRef = useRef<number | null>(null);
@@ -305,6 +398,18 @@ export const MainOverviewPage: React.FC = () => {
   } | null>(null);
 
   const bumpUi = useCallback(() => setUiTick((t) => t + 1), []);
+
+  const showTransientToast = useCallback((message: string) => {
+    clearTimeout(transientToastTimerRef.current);
+    setTransientToast(message);
+    transientToastTimerRef.current = window.setTimeout(() => {
+      setTransientToast(null);
+    }, TRANSIENT_TOAST_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => clearTimeout(transientToastTimerRef.current);
+  }, []);
 
   const triggerRejectBlink = useCallback(
     (trackIndices: number[]) => {
@@ -436,6 +541,220 @@ export const MainOverviewPage: React.FC = () => {
     },
     [getSongSecNow, bumpUi, triggerRejectBlink]
   );
+
+  // ---------------------------------------------------------------------------
+  // Audio edit helpers
+  // ---------------------------------------------------------------------------
+
+  const recomputeTrackAmplitudes = useCallback((trackIndex: number) => {
+    const buffers = buffersRef.current;
+    const s = stateRef.current;
+    if (!buffers || !s.amplitudes) return;
+    const buf = buffers[trackIndex];
+    if (!buf) return;
+    s.amplitudes[trackIndex] = computeAmplitudes(buf, COLUMN_COUNT);
+  }, []);
+
+  // Enforce undo budget: evict oldest entries until total budget fits.
+  const enforceUndoBudget = useCallback(() => {
+    const stack = undoStackRef.current;
+    const totalTrackSeconds = (entry: UndoEntry) => entry.durationSec * entry.restorations.length;
+    let total = stack.reduce((acc, e) => acc + totalTrackSeconds(e), 0);
+    while (total > UNDO_BUDGET_SEC && stack.length > 0) {
+      total -= totalTrackSeconds(stack[0]!);
+      stack.shift();
+    }
+  }, []);
+
+  const handleCutCopy = useCallback((mode: 'cut' | 'copy', allUnmuted: boolean) => {
+    const buffers = buffersRef.current;
+    const s = stateRef.current;
+    if (!buffers) return;
+
+    const songSec = getSongSecNow();
+    const section = getCurrentSection(songSec, s.userMarkerSongSec, SONG_DURATION_SEC);
+    const durationSec = section.endSec - section.startSec;
+
+    // Determine target tracks: either selected track only, or all currently unmuted tracks
+    const targetTracks: number[] = allUnmuted
+      ? Array.from({ length: TRACK_COUNT }, (_, i) => i).filter(i => !s.muted[i])
+      : [s.selectedTrack];
+
+
+    if (targetTracks.length === 0) return;
+
+    // Memory limit check: combined duration across all target tracks <= 8 minutes
+    const combinedSec = durationSec * targetTracks.length;
+    if (combinedSec > UNDO_BUDGET_SEC) {
+      showTransientToast(ERROR_COPY_MAX_LENGTH_MSG);
+      return;
+    }
+
+    let sampleRate = 44100;
+    for (const ti of targetTracks) {
+      const buf = buffers[ti];
+      if (buf) { sampleRate = buf.sampleRate; break; }
+    }
+
+    if (mode === 'cut') {
+      // For CUT: extract audio into clipboard AND save original audio for undo in one pass,
+      // then silence. This avoids a double-read after silencing.
+      const clipTracks = new Map<number, Float32Array[]>();
+      const restorations: UndoRestoration[] = [];
+
+      for (const ti of targetTracks) {
+        const buf = buffers[ti];
+        if (!buf) continue;
+        const extracted = extractAudioSection(buf, section.startSec, section.endSec);
+        // Clipboard gets a copy; undo restoration gets its own independent copy
+        clipTracks.set(ti, extracted.map(ch => ch.slice()));
+        restorations.push({
+          trackIndex: ti,
+          startSample: Math.floor(section.startSec * buf.sampleRate),
+          channels: extracted,
+        });
+        silenceAudioSection(buf, section.startSec, section.endSec);
+        recomputeTrackAmplitudes(ti);
+      }
+
+      clipboardRef.current = { tracks: clipTracks, sampleRate, durationSec };
+      undoStackRef.current.push({ type: 'cut', restorations, durationSec, sampleRate });
+      enforceUndoBudget();
+      redoEntryRef.current = null;
+    } else {
+      // For COPY: only build clipboard, no audio modification, no undo entry
+      const clipTracks = new Map<number, Float32Array[]>();
+      for (const ti of targetTracks) {
+        const buf = buffers[ti];
+        if (!buf) continue;
+        clipTracks.set(ti, extractAudioSection(buf, section.startSec, section.endSec));
+      }
+      clipboardRef.current = { tracks: clipTracks, sampleRate, durationSec };
+    }
+
+    bumpUi();
+  }, [getSongSecNow, recomputeTrackAmplitudes, enforceUndoBudget, bumpUi, showTransientToast]);
+
+  const handlePaste = useCallback(() => {
+    const buffers = buffersRef.current;
+    const clip = clipboardRef.current;
+    const s = stateRef.current;
+    if (!buffers || !clip || clip.tracks.size === 0) return;
+
+    const pasteStartSec = getSongSecNow();
+
+    // Determine target tracks:
+    // - Single track in clipboard -> paste into currently selected track (allows cross-track paste)
+    // - Multiple tracks in clipboard -> paste back into their source tracks
+    let targetMap: Map<number, Float32Array[]>;
+    if (clip.tracks.size === 1) {
+      const [, srcChannels] = [...clip.tracks.entries()][0]!;
+      targetMap = new Map([[s.selectedTrack, srcChannels]]);
+    } else {
+      targetMap = clip.tracks;
+    }
+
+    // Budget check before any modification
+    const combinedSec = clip.durationSec * targetMap.size;
+    if (combinedSec > UNDO_BUDGET_SEC) {
+      showTransientToast(ERROR_COPY_MAX_LENGTH_MSG);
+      return;
+    }
+
+    const endSec = pasteStartSec + clip.durationSec;
+
+    // Save pre-paste audio for undo, then overwrite
+    const restorations: UndoRestoration[] = [];
+    for (const [ti, srcChannels] of targetMap) {
+      const buf = buffers[ti];
+      if (!buf) continue;
+      restorations.push({
+        trackIndex: ti,
+        startSample: Math.floor(pasteStartSec * buf.sampleRate),
+        channels: extractAudioSection(buf, pasteStartSec, endSec),
+      });
+      overwriteAudioSection(buf, pasteStartSec, srcChannels);
+      recomputeTrackAmplitudes(ti);
+    }
+
+    undoStackRef.current.push({
+      type: 'paste',
+      restorations,
+      durationSec: clip.durationSec,
+      sampleRate: clip.sampleRate,
+    });
+    enforceUndoBudget();
+    redoEntryRef.current = null;
+
+    bumpUi();
+  }, [getSongSecNow, recomputeTrackAmplitudes, enforceUndoBudget, bumpUi, showTransientToast]);
+
+  const handleUndo = useCallback(() => {
+    const buffers = buffersRef.current;
+    const stack = undoStackRef.current;
+    if (!buffers || stack.length === 0) return;
+
+    const entry = stack.pop()!;
+
+    // Capture current state at those positions for redo
+    const redoRestorations: UndoRestoration[] = [];
+    for (const rest of entry.restorations) {
+      const buf = buffers[rest.trackIndex];
+      if (!buf) continue;
+      const startSec = rest.startSample / buf.sampleRate;
+      const endSec = startSec + entry.durationSec;
+      redoRestorations.push({
+        trackIndex: rest.trackIndex,
+        startSample: rest.startSample,
+        channels: extractAudioSection(buf, startSec, endSec),
+      });
+      // Restore original audio
+      overwriteAudioSection(buf, startSec, rest.channels);
+      recomputeTrackAmplitudes(rest.trackIndex);
+    }
+
+    redoEntryRef.current = {
+      type: entry.type,
+      restorations: redoRestorations,
+      durationSec: entry.durationSec,
+      sampleRate: entry.sampleRate,
+    };
+
+    bumpUi();
+  }, [recomputeTrackAmplitudes, bumpUi]);
+
+  const handleRedo = useCallback(() => {
+    const buffers = buffersRef.current;
+    const redoEntry = redoEntryRef.current;
+    if (!buffers || !redoEntry) return;
+
+    // Capture current state for a new undo entry
+    const undoRestorations: UndoRestoration[] = [];
+    for (const rest of redoEntry.restorations) {
+      const buf = buffers[rest.trackIndex];
+      if (!buf) continue;
+      const startSec = rest.startSample / buf.sampleRate;
+      const endSec = startSec + redoEntry.durationSec;
+      undoRestorations.push({
+        trackIndex: rest.trackIndex,
+        startSample: rest.startSample,
+        channels: extractAudioSection(buf, startSec, endSec),
+      });
+      overwriteAudioSection(buf, startSec, rest.channels);
+      recomputeTrackAmplitudes(rest.trackIndex);
+    }
+
+    undoStackRef.current.push({
+      type: redoEntry.type,
+      restorations: undoRestorations,
+      durationSec: redoEntry.durationSec,
+      sampleRate: redoEntry.sampleRate,
+    });
+    enforceUndoBudget();
+    redoEntryRef.current = null;
+
+    bumpUi();
+  }, [recomputeTrackAmplitudes, enforceUndoBudget, bumpUi]);
 
   // Timeline pointer: only active in GRID zone (y: CMD_BAR_H … TRACKS_Y0)
   const onTimelinePointerDown = useCallback(
@@ -623,7 +942,8 @@ export const MainOverviewPage: React.FC = () => {
   // Keyboard input
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat) return;
+      // Allow key-repeat for arrow scrolling; block repeat for all other keys
+      if (e.repeat && e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
 
@@ -634,11 +954,59 @@ export const MainOverviewPage: React.FC = () => {
       }
 
       const s = stateRef.current;
-      s.shiftDown = e.shiftKey;
 
       if (isShiftCode(e.code)) {
-        // bumpUi so bottom-bar switches to track-number display immediately
+        clearTimeout(shiftResetTimerRef.current);
+        s.shiftDown = true;
         bumpUi();
+        return;
+      }
+
+      // For Numpad7/8/9: cancel any pending phantom-shift-reset so
+      // s.shiftDown stays true if the user is holding Shift.
+      if (e.code === 'Numpad7' || e.code === 'Numpad8' ||
+          e.code === 'Numpad9' || e.code === 'NumpadSubtract') {
+        clearTimeout(shiftResetTimerRef.current);
+      }
+
+      // Numpad7: toggle marker at playhead (snapped); Shift+Numpad7 clears all user markers
+      if (e.code === 'Numpad7') {
+        e.preventDefault();
+        if (s.shiftDown) {
+          s.userMarkerSongSec = [];
+        } else {
+          const snapped = snapToStepDivision(getSongSecNow(), s.stepDivision);
+          // No toggle at implicit song-start marker (same as mouse on zero hit)
+          if (snapped > 1e-4) {
+            if (s.userMarkerSongSec.some((t) => Math.abs(t - snapped) < 1e-4)) {
+              s.userMarkerSongSec = s.userMarkerSongSec.filter((t) => Math.abs(t - snapped) > 1e-4);
+            } else {
+              s.userMarkerSongSec = [...s.userMarkerSongSec, snapped].sort((a, b) => a - b);
+            }
+          }
+        }
+        bumpUi();
+        return;
+      }
+
+      // Numpad8: CUT (Shift = all unmuted tracks)
+      if (e.code === 'Numpad8') {
+        e.preventDefault();
+        handleCutCopy('cut', s.shiftDown);
+        return;
+      }
+
+      // Numpad9: COPY (Shift = all unmuted tracks)
+      if (e.code === 'Numpad9') {
+        e.preventDefault();
+        handleCutCopy('copy', s.shiftDown);
+        return;
+      }
+
+      // NumpadSubtract: PASTE
+      if (e.code === 'NumpadSubtract') {
+        e.preventDefault();
+        handlePaste();
         return;
       }
 
@@ -658,17 +1026,15 @@ export const MainOverviewPage: React.FC = () => {
         const delta = stepDivisionToSec(s.stepDivision);
         const sign = e.key === 'ArrowLeft' ? -1 : 1;
         const now = getSongSecNow();
-        // Re-align to the nearest grid point IN THE DIRECTION of movement before stepping.
-        // "Already aligned" uses a 1ms tolerance to absorb float drift.
         const nearestGrid = Math.round(now / delta) * delta;
         const isAligned = Math.abs(now - nearestGrid) < 1e-3;
         let next: number;
         if (isAligned) {
           next = now + sign * delta;
         } else if (sign < 0) {
-          next = Math.floor(now / delta) * delta; // leftward: snap to grid left of cursor
+          next = Math.floor(now / delta) * delta;
         } else {
-          next = Math.ceil(now / delta) * delta;  // rightward: snap to grid right of cursor
+          next = Math.ceil(now / delta) * delta;
         }
         while (next < 0) next += SONG_DURATION_SEC;
         while (next >= SONG_DURATION_SEC) next -= SONG_DURATION_SEC;
@@ -686,14 +1052,17 @@ export const MainOverviewPage: React.FC = () => {
 
       const digit =
         e.code >= 'Digit1' && e.code <= 'Digit8' ? parseInt(e.code.slice(5), 10) - 1 : -1;
+      // Numpad7/8/9 are reserved for marker/cut/copy – exclude them from track-select
+      const numpadCode = e.code;
       const numpad =
-        e.code >= 'Numpad1' && e.code <= 'Numpad8' ? parseInt(e.code.slice(6), 10) - 1 : -1;
+        numpadCode >= 'Numpad1' && numpadCode <= 'Numpad6'
+          ? parseInt(numpadCode.slice(6), 10) - 1
+          : -1;
       const trackIndex = digit >= 0 ? digit : numpad;
 
       if (trackIndex >= 0 && trackIndex < TRACK_COUNT) {
         if (e.shiftKey) {
           e.preventDefault();
-          // When song is stopped: always immediate mute (no cue, no blink, no marker)
           if (s.syncMuteMode === 'OFF' || !s.playing) {
             toggleMuteImmediate(trackIndex);
             return;
@@ -709,19 +1078,37 @@ export const MainOverviewPage: React.FC = () => {
 
     const onKeyUp = (e: KeyboardEvent) => {
       if (!isShiftCode(e.code)) return;
-      stateRef.current.shiftDown = e.shiftKey;
+      // Delay the shiftDown reset by 80ms. If a Numpad keydown arrives in
+      // that window it will cancel this timer (see clearTimeout above),
+      // preventing a phantom Windows NumLock shift-release from clearing
+      // the flag before the Numpad handler reads it.
+      clearTimeout(shiftResetTimerRef.current);
+      shiftResetTimerRef.current = window.setTimeout(() => {
+        stateRef.current.shiftDown = false;
+        bumpUi();
+      }, 80);
+    };
+
+    const onBlur = () => {
+      clearTimeout(shiftResetTimerRef.current);
+      stateRef.current.shiftDown = false;
       bumpUi();
     };
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+      clearTimeout(shiftResetTimerRef.current);
     };
   }, [
     bumpUi,
     getSongSecNow,
+    handleCutCopy,
+    handlePaste,
     handlePlayClick,
     startPlayback,
     stopAllSources,
@@ -802,6 +1189,15 @@ export const MainOverviewPage: React.FC = () => {
         ctx2d.stroke();
       }
 
+      // ── Current section highlight in grid area ──────────────────────────
+      {
+        const section = getCurrentSection(songSec, s.userMarkerSongSec, SONG_DURATION_SEC);
+        const sx = section.startSec * PIXELS_PER_SECOND - scrollX;
+        const ex = section.endSec * PIXELS_PER_SECOND - scrollX;
+        ctx2d.fillStyle = 'rgba(255, 160, 52, 0.12)';
+        ctx2d.fillRect(sx, CMD_BAR_H, ex - sx, GRID_H);
+      }
+
       // ── Track lanes ─────────────────────────────────────────────────────
       const amps = s.amplitudes;
       for (let tr = 0; tr < TRACK_COUNT; tr++) {
@@ -810,21 +1206,17 @@ export const MainOverviewPage: React.FC = () => {
         ctx2d.fillRect(0, y0, w, TRACK_H);
 
         const centerY = y0 + Math.floor(TRACK_H / 2);
-        // Centerline occupies ±2px around centerY; subtract that from usable amplitude space
         const maxHalf = Math.floor(TRACK_H / 2) - 4;
 
-        // Track-level state (needed for both centerline and amplitude bars)
         const muted = s.muted[tr]!;
         const sel = s.selectedTrack === tr;
         const hasPending = s.pending.has(tr);
 
-        // Base track color (reflects muted/selected state, no blink)
         let baseColor = COLOR_WAVE_NORMAL;
         if (sel && !muted) baseColor = COLOR_WAVE_SELECTED;
         else if (sel && muted) baseColor = COLOR_WAVE_MUTED_SEL;
         else if (muted) baseColor = COLOR_WAVE_MUTED;
 
-        // Blink state for bars (not applied to centerline)
         const inRejectBlink = rejectActive && rejectBlinkTracksRef.current.has(tr);
         const waveformBlink = hasPending || inRejectBlink;
         const blinkUse = inRejectBlink ? rejectPhase : blinkPhase;
@@ -850,15 +1242,12 @@ export const MainOverviewPage: React.FC = () => {
             }
 
             ctx2d.fillStyle = fill;
-            // Bars grow outward from the centerline edges (±2px)
             ctx2d.fillRect(Math.floor(sx), centerY - 2 - hBar, barW, hBar);
             ctx2d.fillRect(Math.floor(sx), centerY + 2, barW, hBar);
           }
         }
 
         // Centerline drawn AFTER bars: always static baseColor, never blinks.
-        // 2×4px blocks, 2px gap, on the BAR_PITCH grid, covers full visible width
-        // including negative time (left of song start) as a visual track axis.
         const clY = centerY - 2;
         ctx2d.fillStyle = baseColor;
         const clColStart = Math.floor(scrollX / BAR_PITCH) - 1;
@@ -907,7 +1296,6 @@ export const MainOverviewPage: React.FC = () => {
       ctx2d.stroke();
 
       // ── Timeline marker triangles ────────────────────────────────────────
-      // Triangle: 24px wide (±12), 12px tall (top to tip)
       const drawTimelineTriangle = (screenX: number, alpha: number) => {
         const sx = Math.round(screenX);
         if (sx < -14 || sx > w + 14) return;
@@ -979,13 +1367,15 @@ export const MainOverviewPage: React.FC = () => {
           ctx2d.fillText(String(tr + 1), cx, barMidY);
         }
       } else {
-        // Show 8 squares + T mm:ss + B bars:beats
+        // Show 8 squares (clipboard state) + T mm:ss + B bars:beats
         const squareSize = 16;
         const squareGap = 3;
-        const squaresStartX = Math.round(w * 0.12); // ~154px (~1/8 screen)
+        const squaresStartX = Math.round(w * 0.12);
         const squareY = BOTTOM_BAR_Y + Math.floor((BOTTOM_BAR_H - squareSize) / 2);
-        ctx2d.fillStyle = COLOR_BOTTOM_SQUARE;
+        const clip = clipboardRef.current;
         for (let i = 0; i < TRACK_COUNT; i++) {
+          const hasCb = clip !== null && clip.tracks.has(i);
+          ctx2d.fillStyle = hasCb ? COLOR_BOTTOM_SQUARE_FILLED : COLOR_BOTTOM_SQUARE;
           ctx2d.fillRect(squaresStartX + i * (squareSize + squareGap), squareY, squareSize, squareSize);
         }
 
@@ -995,7 +1385,7 @@ export const MainOverviewPage: React.FC = () => {
         const tStr = `T ${mm}:${ss}`;
 
         const totalBeats = Math.floor(songSec / beatDur);
-        const bar = Math.floor(totalBeats / BEATS_PER_BAR); // 0-based: B 00:01 at time 0
+        const bar = Math.floor(totalBeats / BEATS_PER_BAR);
         const beat = (totalBeats % BEATS_PER_BAR) + 1;
         const bStr = `B ${bar.toString().padStart(2, '0')}:${beat.toString().padStart(2, '0')}`;
 
@@ -1035,6 +1425,8 @@ export const MainOverviewPage: React.FC = () => {
   }, [applyGainImmediate, bumpUi]);
 
   const s = stateRef.current;
+  const canUndo = undoStackRef.current.length > 0;
+  const canRedo = redoEntryRef.current !== null;
 
   return (
     <div className="app-container" data-ui-revision={uiTick}>
@@ -1068,6 +1460,46 @@ export const MainOverviewPage: React.FC = () => {
           Timed Mute
         </NavLink>
       </nav>
+
+      <div className="edit-actions">
+        <button
+          className="edit-action-btn"
+          title="CUT – lift selected track's current section to clipboard (Numpad 8 / Shift+Numpad 8 for all unmuted)"
+          onClick={() => handleCutCopy('cut', false)}
+        >
+          CUT
+        </button>
+        <button
+          className="edit-action-btn"
+          title="COPY – copy selected track's current section to clipboard (Numpad 9 / Shift+Numpad 9 for all unmuted)"
+          onClick={() => handleCutCopy('copy', false)}
+        >
+          COPY
+        </button>
+        <button
+          className="edit-action-btn"
+          title="PASTE – overwrite audio at playhead from clipboard (Numpad −)"
+          onClick={handlePaste}
+        >
+          PASTE
+        </button>
+        <button
+          className="edit-action-btn"
+          title="UNDO last CUT or PASTE"
+          onClick={handleUndo}
+          disabled={!canUndo}
+        >
+          UNDO
+        </button>
+        <button
+          className="edit-action-btn"
+          title="REDO last undone action"
+          onClick={handleRedo}
+          disabled={!canRedo}
+        >
+          REDO
+        </button>
+      </div>
 
       <div className="waveform-viewport device-viewport">
         <canvas
@@ -1107,9 +1539,16 @@ export const MainOverviewPage: React.FC = () => {
         </select>
       </div>
 
+      {transientToast !== null ? (
+        <div className="transient-toast-overlay" role="alert" aria-live="assertive">
+          <div className="transient-toast-box">{transientToast}</div>
+        </div>
+      ) : null}
+
       <div className="instructions">
         <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>SHIFT + 1–8</strong>: mute/unmute (synced to bar while playing) &ndash; <strong>ARROW-Keys</strong>: ⏪︎ ⏩︎ scroll by step &ndash; <strong>SHIFT+LEFT</strong>: ⏮ song start.<br />
-        <strong>Top timeline</strong>: set ▼ markers (<strong>click</strong> add/remove; <strong>drag</strong> to move). &ndash; <strong>Step size</strong>: click the division value top-left to change scroll step.
+        <strong>Top timeline</strong>: set ▼ markers (<strong>click</strong> add/remove; <strong>drag</strong> to move; <strong>Numpad 7</strong> toggle at playhead; <strong>Shift+Numpad 7</strong> clear all). &ndash; <strong>Step size</strong>: click the division value top-left.<br />
+        <strong>Numpad 8</strong>: CUT &ndash; <strong>Numpad 9</strong>: COPY &ndash; <strong>Numpad −</strong>: PASTE &ndash; <strong>Shift</strong>+CUT/COPY: all unmuted tracks.
       </div>
     </div>
   );
