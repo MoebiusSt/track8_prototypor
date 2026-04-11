@@ -34,6 +34,7 @@ const COLOR_WAVE_SELECTED = '#a6e22e';
 const COLOR_WAVE_MUTED = '#75715e';
 const COLOR_WAVE_MUTED_SEL = '#668c1c';
 const COLOR_CURSOR = '#7fffff';
+const COLOR_LOOP_SELECTION = 'rgba(127, 255, 255, 0.14)';
 const COLOR_SYNC_UPCOMING_MARKER = '#ffaa00';
 const COLOR_TRIANGLE = '#ffa034';
 const COLOR_TICK_BEAT = '#6a9aaa';
@@ -325,6 +326,11 @@ interface UndoEntry {
   sampleRate: number;
 }
 
+interface LoopSelection {
+  startSec: number;
+  endSec: number;
+}
+
 interface DrawState {
   songSec: number;
   playing: boolean;
@@ -338,6 +344,7 @@ interface DrawState {
   amplitudes: number[][] | null;
   loadError: string | null;
   stepDivision: StepDivision;
+  loopSelection: LoopSelection | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -373,6 +380,7 @@ export const MainOverviewPage: React.FC = () => {
     amplitudes: null,
     loadError: null,
     stepDivision: '1/4',
+    loopSelection: null,
   });
 
   const [uiTick, setUiTick] = useState(0);
@@ -389,6 +397,7 @@ export const MainOverviewPage: React.FC = () => {
 
   const markerDragGhostSecRef = useRef<number | null>(null);
   const markerDragSourceSecRef = useRef<number | null>(null);
+  const prevSongSecRef = useRef<number>(-Infinity);
   const timelinePointerRef = useRef<{
     pointerId: number;
     startClientX: number;
@@ -1021,11 +1030,40 @@ export const MainOverviewPage: React.FC = () => {
         return;
       }
 
-      // For Numpad7/8/9: cancel any pending phantom-shift-reset so
+      // For Numpad5–9/Subtract: cancel any pending phantom-shift-reset so
       // s.shiftDown stays true if the user is holding Shift.
-      if (e.code === 'Numpad7' || e.code === 'Numpad8' ||
+      if (e.code === 'Numpad5' || e.code === 'Numpad6' ||
+          e.code === 'Numpad7' || e.code === 'Numpad8' ||
           e.code === 'Numpad9' || e.code === 'NumpadSubtract') {
         clearTimeout(shiftResetTimerRef.current);
+      }
+
+      // Numpad5: set loop-selection start (keeps existing end if valid)
+      if (e.code === 'Numpad5') {
+        e.preventDefault();
+        const t = Math.min(Math.max(0, getSongSecNow()), SONG_DURATION_SEC);
+        const prevEnd = s.loopSelection?.endSec ?? -1;
+        // Keep the stored end-point; selection becomes active only when end > start
+        s.loopSelection = prevEnd > t + 1e-4
+          ? { startSec: t, endSec: prevEnd }
+          : { startSec: t, endSec: -1 }; // end not yet set or invalid after move
+        bumpUi();
+        return;
+      }
+
+      // Numpad6: set loop-selection end; end <= start (or at time 0) clears the loop
+      if (e.code === 'Numpad6') {
+        e.preventDefault();
+        const t = Math.min(Math.max(0, getSongSecNow()), SONG_DURATION_SEC);
+        const startSec = s.loopSelection?.startSec ?? 0;
+        if (t <= startSec + 1e-4) {
+          // end at or before start → deactivate (including: jump to 0, press Numpad6)
+          s.loopSelection = null;
+        } else {
+          s.loopSelection = { startSec, endSec: t };
+        }
+        bumpUi();
+        return;
       }
 
       // Numpad7: toggle marker at playhead (snapped); Shift+Numpad7 clears all user markers
@@ -1088,10 +1126,10 @@ export const MainOverviewPage: React.FC = () => {
 
       const digit =
         e.code >= 'Digit1' && e.code <= 'Digit8' ? parseInt(e.code.slice(5), 10) - 1 : -1;
-      // Numpad7/8/9 are reserved for marker/cut/copy – exclude them from track-select
+      // Numpad5/6 are reserved for loop-selection; Numpad7/8/9 for marker/cut/copy
       const numpadCode = e.code;
       const numpad =
-        numpadCode >= 'Numpad1' && numpadCode <= 'Numpad6'
+        numpadCode >= 'Numpad1' && numpadCode <= 'Numpad4'
           ? parseInt(numpadCode.slice(6), 10) - 1
           : -1;
       const trackIndex = digit >= 0 ? digit : numpad;
@@ -1171,6 +1209,26 @@ export const MainOverviewPage: React.FC = () => {
         while (songSec >= SONG_DURATION_SEC) songSec -= SONG_DURATION_SEC;
         while (songSec < 0) songSec += SONG_DURATION_SEC;
 
+        // ── Loop-Selection wrap ──────────────────────────────────────────
+        const loop = s.loopSelection;
+        if (loop && loop.endSec > loop.startSec + 1e-4) {
+          const prev = prevSongSecRef.current;
+          // Detect forward crossing of loopEnd (handles wrap-around at song boundary)
+          const crossed =
+            prev >= 0 &&
+            prev < loop.endSec &&
+            songSec >= loop.endSec - 1e-4;
+          if (crossed) {
+            songSec = loop.startSec;
+            s.songSec = songSec;
+            stopAllSources();
+            anchorSongSecRef.current = songSec;
+            anchorAudioTimeRef.current = actx.currentTime;
+            startPlayback();
+          }
+        }
+        prevSongSecRef.current = songSec;
+
         if (s.pending.size > 0 && s.syncMuteMode !== 'OFF') {
           const now = actx.currentTime;
           let anyApplied = false;
@@ -1233,6 +1291,17 @@ export const MainOverviewPage: React.FC = () => {
         const ex = section.endSec * PIXELS_PER_SECOND - scrollX;
         ctx2d.fillStyle = 'rgba(255, 160, 52, 0.12)';
         ctx2d.fillRect(sx, CMD_BAR_H, ex - sx, GRID_H);
+      }
+
+      // ── Loop-selection highlight in grid area ────────────────────────────
+      {
+        const loop = s.loopSelection;
+        if (loop && loop.endSec > loop.startSec + 1e-4) {
+          const sx = loop.startSec * PIXELS_PER_SECOND - scrollX;
+          const ex = loop.endSec * PIXELS_PER_SECOND - scrollX;
+          ctx2d.fillStyle = COLOR_LOOP_SELECTION;
+          ctx2d.fillRect(sx, CMD_BAR_H, ex - sx, GRID_H);
+        }
       }
 
       // ── Track lanes ─────────────────────────────────────────────────────
@@ -1587,7 +1656,8 @@ export const MainOverviewPage: React.FC = () => {
       <div className="instructions">
         <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>ARROW-Keys or Mousewheel </strong>: ⏪︎ ⏩︎ scroll by step-size &ndash; <strong>SHIFT+LEFT</strong>: ⏮ song start. &ndash; <strong>SHIFT + 1–8</strong>: mute/unmute (synced to bar while playing)<br />
         <strong>Numpad 7 or Mouseclick in Grid-Bar</strong> set ▼ marker (<strong>mouse-drag</strong> to move;  <strong>Shift+Numpad 7</strong> clear all). &ndash; <strong>F1</strong>–<strong>F9</strong>: Set step size (4/1, … 1/2, … 1/64).<br />
-        <strong>Numpad 8</strong>: CUT segment &ndash; <strong>Numpad 9</strong>: COPY segment &ndash; <strong>Numpad Minus</strong>: PASTE &ndash; <strong>Shift+CUT/COPY</strong>: cut or copy all unmuted tracks.
+        <strong>Numpad 8</strong>: CUT segment &ndash; <strong>Numpad 9</strong>: COPY segment &ndash; <strong>Numpad Minus</strong>: PASTE &ndash; <strong>Shift+CUT/COPY</strong>: cut or copy all unmuted tracks.<br />
+        <strong>Numpad 5</strong>: set loop start &ndash; <strong>Numpad 6</strong>: set loop end (cyan overlay; playhead wraps at end). Set loop end at time&nbsp;0 to clear.
       </div>
     </div>
   );
