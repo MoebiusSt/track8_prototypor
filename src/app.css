@@ -252,6 +252,15 @@ body {
   border-color: #555;
 }
 
+.edit-action-btn.edit-action-btn--shift-modifier {
+  outline: 2px solid #ffaa00;
+  outline-offset: 2px;
+}
+
+.edit-action-btn.edit-action-btn--shift-modifier:hover:not(:disabled) {
+  outline-color: #ffc040;
+}
+
 .edit-action-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;

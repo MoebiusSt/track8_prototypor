@@ -346,6 +346,7 @@ interface DrawState {
 
 export const MainOverviewPage: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const buffersRef = useRef<AudioBuffer[] | null>(null);
   const gainNodesRef = useRef<GainNode[] | null>(null);
@@ -503,6 +504,48 @@ export const MainOverviewPage: React.FC = () => {
     stateRef.current.pending.clear();
     bumpUi();
   }, [getSongSecNow, stopAllSources, bumpUi]);
+
+  /** One grid step in song time: sign +1 = forward (ArrowRight), -1 = back (ArrowLeft). */
+  const applySongScrollStep = useCallback((sign: -1 | 1) => {
+    const s = stateRef.current;
+    const delta = stepDivisionToSec(s.stepDivision);
+    const now = getSongSecNow();
+    const nearestGrid = Math.round(now / delta) * delta;
+    const isAligned = Math.abs(now - nearestGrid) < 1e-3;
+    let next: number;
+    if (isAligned) {
+      next = now + sign * delta;
+    } else if (sign < 0) {
+      next = Math.floor(now / delta) * delta;
+    } else {
+      next = Math.ceil(now / delta) * delta;
+    }
+    while (next < 0) next += SONG_DURATION_SEC;
+    while (next >= SONG_DURATION_SEC) next -= SONG_DURATION_SEC;
+    s.songSec = next;
+    if (s.playing) {
+      stopAllSources();
+      anchorSongSecRef.current = next;
+      const ctx = audioCtxRef.current;
+      if (ctx) anchorAudioTimeRef.current = ctx.currentTime;
+      startPlayback();
+    }
+    bumpUi();
+  }, [getSongSecNow, stopAllSources, startPlayback, bumpUi]);
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      // Scroll up (negative deltaY) = back; scroll down (positive deltaY) = forward
+      if (e.deltaY < 0) applySongScrollStep(-1);
+      else applySongScrollStep(1);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [applySongScrollStep]);
 
   const toggleMuteImmediate = useCallback(
     (trackIndex: number) => {
@@ -947,13 +990,29 @@ export const MainOverviewPage: React.FC = () => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
 
+      const s = stateRef.current;
+
+      // F1–F9: step-division presets — must preventDefault + capture so the browser
+      // does not handle F5 (reload), F3 (search), F7 (caret browsing), etc.
+      if (e.code.startsWith('F')) {
+        const n = parseInt(e.code.slice(1), 10);
+        if (Number.isFinite(n) && n >= 1 && n <= 9) {
+          e.preventDefault();
+          e.stopPropagation();
+          const idx = n - 1;
+          if (idx < STEP_DIVISIONS.length) {
+            s.stepDivision = STEP_DIVISIONS[idx]!;
+            bumpUi();
+          }
+          return;
+        }
+      }
+
       if (e.code === 'Space') {
         e.preventDefault();
         void handlePlayClick();
         return;
       }
-
-      const s = stateRef.current;
 
       if (isShiftCode(e.code)) {
         clearTimeout(shiftResetTimerRef.current);
@@ -1023,30 +1082,7 @@ export const MainOverviewPage: React.FC = () => {
           bumpUi();
           return;
         }
-        const delta = stepDivisionToSec(s.stepDivision);
-        const sign = e.key === 'ArrowLeft' ? -1 : 1;
-        const now = getSongSecNow();
-        const nearestGrid = Math.round(now / delta) * delta;
-        const isAligned = Math.abs(now - nearestGrid) < 1e-3;
-        let next: number;
-        if (isAligned) {
-          next = now + sign * delta;
-        } else if (sign < 0) {
-          next = Math.floor(now / delta) * delta;
-        } else {
-          next = Math.ceil(now / delta) * delta;
-        }
-        while (next < 0) next += SONG_DURATION_SEC;
-        while (next >= SONG_DURATION_SEC) next -= SONG_DURATION_SEC;
-        s.songSec = next;
-        if (s.playing) {
-          stopAllSources();
-          anchorSongSecRef.current = next;
-          const ctx = audioCtxRef.current;
-          if (ctx) anchorAudioTimeRef.current = ctx.currentTime;
-          startPlayback();
-        }
-        bumpUi();
+        applySongScrollStep(e.key === 'ArrowLeft' ? -1 : 1);
         return;
       }
 
@@ -1095,16 +1131,17 @@ export const MainOverviewPage: React.FC = () => {
       bumpUi();
     };
 
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, { capture: true });
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
       clearTimeout(shiftResetTimerRef.current);
     };
   }, [
+    applySongScrollStep,
     bumpUi,
     getSongSecNow,
     handleCutCopy,
@@ -1463,18 +1500,20 @@ export const MainOverviewPage: React.FC = () => {
 
       <div className="edit-actions">
         <button
-          className="edit-action-btn"
-          title="CUT – lift selected track's current section to clipboard (Numpad 8 / Shift+Numpad 8 for all unmuted)"
-          onClick={() => handleCutCopy('cut', false)}
+          type="button"
+          className={`edit-action-btn${s.shiftDown ? ' edit-action-btn--shift-modifier' : ''}`}
+          title="CUT — selected track; hold Shift for all unmuted (Numpad 8 / Shift+Numpad 8)"
+          onClick={(e) => handleCutCopy('cut', e.shiftKey)}
         >
-          CUT
+          {s.shiftDown ? 'CUT ALL' : 'CUT'}
         </button>
         <button
-          className="edit-action-btn"
-          title="COPY – copy selected track's current section to clipboard (Numpad 9 / Shift+Numpad 9 for all unmuted)"
-          onClick={() => handleCutCopy('copy', false)}
+          type="button"
+          className={`edit-action-btn${s.shiftDown ? ' edit-action-btn--shift-modifier' : ''}`}
+          title="COPY — selected track; hold Shift for all unmuted (Numpad 9 / Shift+Numpad 9)"
+          onClick={(e) => handleCutCopy('copy', e.shiftKey)}
         >
-          COPY
+          {s.shiftDown ? 'COPY ALL' : 'COPY'}
         </button>
         <button
           className="edit-action-btn"
@@ -1501,7 +1540,7 @@ export const MainOverviewPage: React.FC = () => {
         </button>
       </div>
 
-      <div className="waveform-viewport device-viewport">
+      <div ref={viewportRef} className="waveform-viewport device-viewport">
         <canvas
           ref={canvasRef}
           width={VISIBLE_WIDTH}
@@ -1546,9 +1585,9 @@ export const MainOverviewPage: React.FC = () => {
       ) : null}
 
       <div className="instructions">
-        <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>SHIFT + 1–8</strong>: mute/unmute (synced to bar while playing) &ndash; <strong>ARROW-Keys</strong>: ⏪︎ ⏩︎ scroll by step &ndash; <strong>SHIFT+LEFT</strong>: ⏮ song start.<br />
-        <strong>Top timeline</strong>: set ▼ markers (<strong>click</strong> add/remove; <strong>drag</strong> to move; <strong>Numpad 7</strong> toggle at playhead; <strong>Shift+Numpad 7</strong> clear all). &ndash; <strong>Step size</strong>: click the division value top-left.<br />
-        <strong>Numpad 8</strong>: CUT &ndash; <strong>Numpad 9</strong>: COPY &ndash; <strong>Numpad −</strong>: PASTE &ndash; <strong>Shift</strong>+CUT/COPY: all unmuted tracks.
+        <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>ARROW-Keys or Mousewheel </strong>: ⏪︎ ⏩︎ scroll by step-size &ndash; <strong>SHIFT+LEFT</strong>: ⏮ song start. &ndash; <strong>SHIFT + 1–8</strong>: mute/unmute (synced to bar while playing)<br />
+        <strong>Numpad 7 or Mouseclick in Grid-Bar</strong> set ▼ marker (<strong>mouse-drag</strong> to move;  <strong>Shift+Numpad 7</strong> clear all). &ndash; <strong>F1</strong>–<strong>F9</strong>: Set step size (4/1, … 1/2, … 1/64).<br />
+        <strong>Numpad 8</strong>: CUT segment &ndash; <strong>Numpad 9</strong>: COPY segment &ndash; <strong>Numpad Minus</strong>: PASTE &ndash; <strong>Shift+CUT/COPY</strong>: cut or copy all unmuted tracks.
       </div>
     </div>
   );
