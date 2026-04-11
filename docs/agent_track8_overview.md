@@ -57,8 +57,8 @@ docs/
 ## Routing (App.tsx)
 
 ```
-/           → MainOverviewPage  (default on page load)
-/overview   → MainOverviewPage
+/           → redirect → /overview
+/overview   → MainOverviewPage  (default on page load)
 /piano      → PianoRollPage
 /timed-mute → TimedMutePage
 /waveform   → WaveformPage
