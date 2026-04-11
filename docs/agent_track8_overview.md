@@ -20,7 +20,7 @@ Design philosophy is documented in [`docs/Track8_feature_design_principles.md`](
 |---|---|
 | Build | Vite 5, TypeScript 5.6 |
 | UI framework | React 18 (hooks only, no class components) |
-| Routing | react-router-dom v6, `BrowserRouter` with `basename="/track8_midi-note-snap"` |
+| Routing | react-router-dom v6, `BrowserRouter` with `basename="/track8_prototypor"` |
 | Rendering | HTML5 Canvas (`requestAnimationFrame` loop), **no SVG, no DOM elements inside the viewport** |
 | Audio | Web Audio API (`AudioContext`, `GainNode`, `AudioBufferSourceNode`) |
 | Fonts | Monogram pixel font (`src/assets/fonts/monogram_Medium.ttf`) loaded via `src/theme/fonts.css` |

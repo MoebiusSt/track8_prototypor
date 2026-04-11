@@ -7,7 +7,7 @@ import { MainOverviewPage } from './pages/MainOverviewPage';
 
 export const App: React.FC = () => {
   return (
-    <BrowserRouter basename="/track8_midi-note-snap">
+    <BrowserRouter basename="/track8_prototypor">
       <Routes>
         <Route path="/" element={<MainOverviewPage />} />
         <Route path="/overview" element={<MainOverviewPage />} />
