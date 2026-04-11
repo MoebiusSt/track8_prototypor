@@ -19,6 +19,10 @@ const COLUMN_COUNT = Math.floor(SONG_WORLD_WIDTH / BAR_PITCH);
 const CURSOR_X = Math.floor(VISIBLE_WIDTH / 2);
 
 // Layout zones (total: 400px)
+const CMD_ENCODER_SLOT_COUNT = 8;
+/** Center X of CMD-bar encoder slot i (0..7); matches hardware encoder positions */
+const cmdEncoderSlotCenterX = (slotIndex: number, canvasW: number = VISIBLE_WIDTH) =>
+  (slotIndex + 0.5) * (canvasW / CMD_ENCODER_SLOT_COUNT);
 const CMD_BAR_H = 25;   // top command bar
 const GRID_H = 24;      // time-division grid (beat/bar ticks)
 const BOTTOM_BAR_H = 26; // bottom status bar
@@ -1423,7 +1427,7 @@ export const MainOverviewPage: React.FC = () => {
       if (stateRef.current.clipboardMode) {
         if (ly < CMD_BAR_H) {
           const lx = viewportClientXToLogical(canvas, e.clientX);
-          const slot = Math.floor(lx / (VISIBLE_WIDTH / 8)); // 0-based slot index
+          const slot = Math.floor(lx / (VISIBLE_WIDTH / CMD_ENCODER_SLOT_COUNT)); // 0-based slot index
           const s = stateRef.current;
           if (slot === 1) {
             // VOL drag-to-set
@@ -1525,9 +1529,10 @@ export const MainOverviewPage: React.FC = () => {
         if (canvas) { try { canvas.releasePointerCapture(e.pointerId); } catch { /* ignore */ } }
         const dist = Math.abs(e.clientX - drag.startClientX);
         if (dist < 5) {
-          // Click without drag → execute action with current value
-          if (drag.slot === 1) handleClipboardVol(stateRef.current.cbModVolDb);
-          else if (drag.slot === 2) handleClipboardPan(stateRef.current.cbModPan);
+          // Click without drag → execute action with current value (skip neutral 0 dB / 0 LR)
+          const clipS = stateRef.current;
+          if (drag.slot === 1 && clipS.cbModVolDb !== 0) handleClipboardVol(clipS.cbModVolDb);
+          else if (drag.slot === 2 && clipS.cbModPan !== 0) handleClipboardPan(clipS.cbModPan);
         }
         return;
       }
@@ -2436,14 +2441,13 @@ export const MainOverviewPage: React.FC = () => {
       ctx2d.font = '20px Monogram, monospace';
       ctx2d.textBaseline = 'middle';
       const cmdMidY = CMD_BAR_H / 2;
-      ctx2d.textAlign = 'left';
-      ctx2d.fillText(s.stepDivision, 8, cmdMidY);
-      ctx2d.textAlign = 'right';
-      ctx2d.fillText('SCROLL', w - 8, cmdMidY);
+      ctx2d.textAlign = 'center';
+      ctx2d.fillText(s.stepDivision, cmdEncoderSlotCenterX(0, w), cmdMidY);
+      ctx2d.fillText('SCROLL', cmdEncoderSlotCenterX(7, w), cmdMidY);
 
       // ── Clipboard Modifier Action labels in CMD bar (slots 2-5) ──────────
       if (isClipMode) {
-        const slotW = w / 8;
+        const slotW = w / CMD_ENCODER_SLOT_COUNT;
         ctx2d.textAlign = 'center';
         // Slot 2 — VOL
         const volLabel = s.cbModVolDb === 0 ? '0 dB' : `${s.cbModVolDb} dB`;
@@ -2581,7 +2585,7 @@ export const MainOverviewPage: React.FC = () => {
           style={{
             position: 'absolute',
             top: 0,
-            left: 0,
+            left: cmdEncoderSlotCenterX(0) - 36,
             width: 72,
             height: CMD_BAR_H,
             opacity: 0,
@@ -2630,7 +2634,7 @@ export const MainOverviewPage: React.FC = () => {
           <strong>SPACE</strong>: ⏯ PLAY/PAUSE &ndash; <strong>ARROW-Keys or Mousewheel </strong>: ⏪︎ ⏩︎ scroll by step-size &ndash; <strong>SHIFT+LEFT</strong>: ⏮ song start. &ndash; <strong>SHIFT + 1–8</strong>: mute/unmute (synced to bar while playing)<br />
           <strong>Numpad 7 or Mouseclick in Grid-Bar</strong> set ▼ marker (<strong>mouse-drag</strong> to move;  <strong>Shift+Numpad 7</strong> clear all). &ndash; <strong>F1</strong>–<strong>F9</strong>: Set step size (4/1, … 1/2, … 1/64).<br />
           <strong>Numpad 8</strong>: CUT segment &ndash; <strong>Numpad 9</strong>: COPY segment &ndash; <strong>Numpad Minus</strong>: PASTE &ndash; <strong>Shift+CUT/COPY</strong>: cut or copy all unmuted tracks.<br />
-          <strong>Numpad 5</strong>: set loop start &ndash; <strong>Numpad 6</strong>: set loop end (cyan overlay; playhead wraps at end). Set loop end at time&nbsp;0 to clear.<br />
+          <strong>Numpad 5</strong>: set loop start &ndash; <strong>Numpad 6</strong>: set loop end (green overlay; playhead warps at end). Set loop end at time&nbsp;0 to clear.<br />
           Click <strong> ◻◻◻◻◻◻◻◻ </strong> to open <strong>Clipboard Overview</strong>
         </div>
       )}
