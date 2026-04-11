@@ -39,10 +39,10 @@ src/
   app.css                   Global styles: .device-viewport, .demo-nav, controls-bar, timed-mute-*
   theme/fonts.css           @font-face for Monogram
   pages/
-    MainOverviewPage.tsx    ★ PRIMARY VIEW – 8-track main overview (see below)
-    TimedMutePage.tsx       Timed Mute lab view (configurable sync mute modes)
-    WaveformPage.tsx        Single-waveform + polyline view
-    PianoRollPage.tsx       MIDI piano roll + snap algorithm explorer
+    MainOverviewPage.tsx    ★ PRIMARY VIEW – 8-track main overview (~2744 lines, see below)
+    TimedMutePage.tsx       Timed Mute lab view (~1380 lines, configurable sync mute modes)
+    WaveformPage.tsx        Single-waveform + polyline view (~623 lines)
+    PianoRollPage.tsx       MIDI piano roll + snap algorithm explorer (~620 lines)
   assets/fonts/
     audio/track1-8.mp3      Demo audio stems
     monogram_Medium.ttf     Pixel font
@@ -50,6 +50,7 @@ docs/
   ARCHITECTURE.md           High-level stack overview
   Track8_feature_design_principles.md  Product design rules
   agent_track8_overview.md  ← this file
+  clipboard-overview-and-modifier_pseudocode.md  Hardware-dev spec for Clipboard Overview
 ```
 
 ---
@@ -71,7 +72,7 @@ NavLinks are rendered inside each page component itself (not in App.tsx). Every 
 
 ## MainOverviewPage — The Primary View
 
-**File:** `src/pages/MainOverviewPage.tsx` (~1100 lines)
+**File:** `src/pages/MainOverviewPage.tsx` (~2744 lines)
 
 This is the most developed view and the one actively receiving new features. All canvas rendering, audio, and interaction logic lives in one React component with a `useRef`-based state machine.
 
@@ -131,6 +132,22 @@ interface DrawState {
   amplitudes: number[][] | null; // [8][COLUMN_COUNT] peak amplitudes
   loadError: string | null;
   stepDivision: StepDivision; // scroll step size, default '1/4'
+  loopSelection: LoopSelection | null; // { startSec, endSec } cyan region
+
+  // Clipboard Overview Mode
+  clipboardMode: boolean;
+  clipboardSongSec: number;           // independent playhead for clipboard
+  clipboardPlaying: boolean;
+  clipboardSelectedTracks: boolean[]; // [8] track selection (green highlight)
+  clipboardSelection: LoopSelection | null; // region selection for operations
+  clipboardAmplitudes: number[][] | null;   // [8][N] peaks from clipboard buffers
+  clipboardColumnCount: number;
+  clipboardDurationSec: number;
+
+  // Clipboard Modifier values (reset on mode enter)
+  cbModVolDb: number;     // -60..0 dB, 0 = neutral
+  cbModPan: number;       // -100..100, 0 = center, step 10
+  cbModSpeedIdx: number;  // index into CB_SPEED_RATIOS array
 }
 ```
 
@@ -149,13 +166,15 @@ interface DrawState {
 Single `useEffect` with `requestAnimationFrame(draw)`. Dependencies: `[applyGainImmediate, bumpUi]`.  
 Draw order per frame:
 1. Background fill
-2. CMD bar bg + text (step division, "SCROLL")
+2. CMD bar bg + text (step division, modifier labels in clipboard mode, "SCROLL")
 3. Time grid (beat/bar ticks, 2px wide lines)
 4. 8 track lanes: bg → amplitude bars (with blink) → centerline (static, drawn AFTER bars)
 5. Playhead cursor line (cyan, `CURSOR_X`, no triangle)
-6. User marker triangles (orange ▼, 24px wide × 12px tall)
-7. Bottom bar: either 8 squares + T/B time display, or track numbers 1–8 (when SHIFT held)
-8. CMD bar text on top (Monogram 20px)
+6. User marker triangles (orange ▼, 24px wide × 12px tall) — song mode only
+7. Loop/region selection overlay (cyan) — both modes
+8. Bottom bar: either 8 squares + T/B time display, or track numbers 1–8 (when SHIFT held)
+9. **Clipboard mode only:** orange 2px inset outline around full canvas
+10. CMD bar text on top (Monogram 20px)
 
 ### Waveform Rendering Detail
 
@@ -166,7 +185,7 @@ Bars grow outward from `centerY ± 2` (the ±2px reserved for the centerline).
 
 **Centerline:** 2×4px blocks at `clY = centerY − 2`, period=4px, drawn full visible width including negative time (before song start). Uses `baseColor` (no blink). Drawn after bars so it stays on top.
 
-**Blink logic** (pending mute cue): bars switch between `baseColor` ↔ muted-variant at 4 Hz. Reject blink (invalid cue) at 11 Hz. Centerline never blinks.
+**Blink logic** (pending mute cue): bars switch between `baseColor` ↔ muted-variant at ~4 Hz. Reject blink (invalid cue) at ~11 Hz. Centerline never blinks. **Blink does not exist in clipboard mode.**
 
 ### Timed Mute System
 
@@ -196,10 +215,13 @@ Fixed to `SYNC MUTE: BAR` + `SYNC MODE: SIMPLE`.
 
 - **SHIFT not held:** 8 dark-orange squares (16×16px, starting ~x=154) + `T mm:ss` + `B bar:beat`  
   - Bar is 0-based (`Math.floor(totalBeats / BEATS_PER_BAR)`)  
-  - Beat is 1-based (`(totalBeats % 4) + 1`)  
-- **SHIFT held:** track numbers 1–8 in mute-state colors (bright orange = unmuted, dark = muted, blinking = pending)
+  - Beat is 1-based (`(totalBeats % 4) + 1`)
+  - Squares show whether each track has clipboard content (`clip.tracks.has(i)`) — same in both modes
+  - Label: `CLIPBOARD` (orange) when clipboard has data, otherwise `AUDIO`
+- **SHIFT held, song mode:** track numbers 1–8 in mute-state colors (bright orange = unmuted, dark = muted, blinking = pending)
+- **SHIFT held, clipboard mode:** track numbers 1–8 in selection colors (green = selected, orange = not selected)
 
-### Key Bindings (this view)
+### Key Bindings (song mode)
 
 | Key | Action |
 |---|---|
@@ -210,6 +232,105 @@ Fixed to `SYNC MUTE: BAR` + `SYNC MODE: SIMPLE`.
 | `SHIFT + 1–8` | Mute/unmute (synced BAR if playing, immediate if stopped) |
 | Click on grid | Place / remove marker |
 | Drag marker | Move marker |
+| Click 8-squares area (bottom bar) | Enter clipboard mode (if clipboard has data) |
+
+### Key Bindings (clipboard mode)
+
+| Key | Action |
+|---|---|
+| `Space` | Play / Pause clipboard audio |
+| `ArrowLeft` / `Right` | Scroll clipboard position |
+| `SHIFT + ArrowLeft` | Jump to clipboard start |
+| `1–8` | **Exclusive** track selection (single track) |
+| `SHIFT + 1–8` | **Multi-toggle** track selection |
+| `Numpad5` | Set region start at current playhead |
+| `Numpad6` | Set region end at current playhead (or clear if ≤ start) |
+| `Numpad8` | CUT selection into internal clipboard |
+| `Numpad9` | COPY selection into internal clipboard |
+| `NumpadSubtract` | PASTE from internal clipboard at playhead |
+| `Escape` | Exit clipboard mode |
+| Click 8-squares area | Exit clipboard mode |
+
+---
+
+## Clipboard Overview Mode
+
+**Activated** by clicking the 8-squares area in the bottom bar (only if clipboard contains data). **Deactivated** by clicking the same area again or pressing Escape.
+
+This is a **modal overlay** of the same canvas. The main song playback is paused on entry; the clipboard has its own independent playhead, playback engine (separate `AudioBufferSourceNode[]` and `GainNode[]`), and amplitude data.
+
+### Entry
+
+On enter: song paused → clipboard `AudioBuffer[]` built from `clipboardRef.current.tracks` → amplitudes computed → `clipboardSongSec = 0`, `clipboardPlaying = false`, all `clipboardSelectedTracks = false`, `clipboardSelection = null`, modifier values reset to neutral.
+
+### Exit
+
+Clipboard playback stopped → clipboard audio nodes cleaned up → `clipboardMode = false`. Song playhead position is preserved.
+
+### Rendering differences vs. song mode
+
+| Aspect | Song Mode | Clipboard Mode |
+|--------|-----------|----------------|
+| Waveform data | song amplitudes | clipboard amplitudes |
+| Scroll position | `songSec` | `clipboardSongSec` |
+| Timeline length | 70 s (fixed) | `clipboardDurationSec` (dynamic) |
+| Track color model | selected / muted / normal | 4-state: has-audio × selected (see below) |
+| User markers | shown (orange ▼) | hidden |
+| Loop region overlay | `loopSelection` | `clipboardSelection` |
+| Canvas outline | none | orange 2px inset |
+
+**Track color model in clipboard mode** (4 states):
+
+| Has audio | Selected | Color |
+|-----------|----------|-------|
+| yes | no | white (normal) |
+| no | no | grey (muted) |
+| yes | yes | bright green (selected) |
+| no | yes | dark green (muted-selected) |
+
+### Internal clipboard (CUT/COPY/PASTE within clipboard mode)
+
+`cbInternalClipRef` is a separate `ClipboardData` ref, isolated from the main song clipboard (`clipboardRef`). It is cleared on entry and exit of clipboard mode. Operations target the current track/region selection, defaulting to all audio tracks / full duration if nothing is selected.
+
+- **COPY:** Extracts the selected region from clipboard audio into `cbInternalClipRef`. No modification.
+- **CUT:** Extracts + silences the region in both the `AudioBuffer` (for playback) and the underlying `Float32Array` data (for persistence). If the entire track is silenced, the track is removed from `clip.tracks` (same semantics as "never had audio").
+- **PASTE:** Overwrites at the current clipboard playhead position from `cbInternalClipRef`. Updates both `AudioBuffer` and `Float32Array` data. Amplitudes recomputed after each operation.
+
+---
+
+## Clipboard Modifiers
+
+In clipboard mode, CMD bar slots 1–5 (0-indexed) show modifier controls. Slot 0 = step division (unchanged), slot 7 = SCROLL (unchanged).
+
+| Slot | Label | Type | Range | Neutral |
+|------|-------|------|-------|---------|
+| 1 | `X dB` | VOL | -60..0 dB | 0 dB |
+| 2 | `XL` / `XR` / `0 LR` | PAN | -100..100 (step 10) | 0 |
+| 3 | `FADE OUT` / `FADE IN` | FADE | in / out | — |
+| 4 | `REVERSE` | REVERSE | — | — |
+| 5 | speed ratio | SPEED | array of ratios | 1× |
+
+**Interaction model:**
+- **VOL / PAN / SPEED:** Drag horizontally to preview the value (updates label live). A short press (< 5px movement) on release **executes** the action. Dragging alone does not apply audio changes.
+- **FADE / REVERSE:** Click immediately executes. No drag-to-set. FADE direction toggles with SHIFT held (FADE IN vs FADE OUT).
+
+All modifier actions use the same target-resolution logic as CUT/COPY/PASTE (selected tracks or all audio tracks; selected region or full duration).
+
+After each execution: audio data modified in-place in `AudioBuffer` + `Float32Array`, amplitudes recomputed, toast feedback shown.
+
+**Modifier algorithms (brief):**
+
+- **VOL:** `gain = 10^(db/20)`, multiply every sample in range.
+- **PAN (stereo only):** Equal-power pan law applied per-sample to L/R channels.
+- **FADE:** Linear ramp `t = (i − start) / len`; FADE OUT multiplies by `(1−t)`, FADE IN by `t`.
+- **REVERSE:** In-place sample swap from both ends of the range toward center. Applying twice restores original.
+- **SPEED:** Resampling/time-stretch; adjusts `clipboardDurationSec` and `clipboardColumnCount` accordingly.
+
+---
+
+## Toast / Transient Feedback
+
+`showTransientToast(message, { durationMs, variant })` — displays a DOM overlay (outside canvas) for short feedback. Two duration tiers: long (~1.7 s, default, for errors/info) and short (~0.8 s, for command confirmations). Variant `'success'` renders green styling. Auto-clears after timeout.
 
 ---
 
@@ -276,6 +397,10 @@ BAR_PITCH = 4        // px per waveform column
 
 **No CSS transforms.** The canvas viewport does not scale. `VISIBLE_WIDTH=1280` must fit the user's screen or they will see overflow/scroll.
 
+**Clipboard dual-write.** Any modification to clipboard audio (CUT, PASTE, VOL, PAN, FADE, REVERSE, SPEED) must be applied to **both** the `AudioBuffer` (for immediate playback effect) and the `Float32Array` data in `clipboardRef.current.tracks` (for persistence when re-entering clipboard mode or pasting back to the song). After each write: call `recomputeClipboardTrackAmplitudes(trackIndex)`.
+
+**Clipboard track deletion.** After a full-track CUT (entire duration silenced), the track is removed from `clip.tracks` via `Map.delete()`. All consumers of `clip.tracks.has(i)` (waveform color, bottom-bar squares, paste logic) correctly interpret absence as "no audio".
+
 ---
 
 ## Adding a New Feature — Checklist
@@ -286,4 +411,6 @@ BAR_PITCH = 4        // px per waveform column
 4. Put interaction logic in the `onKeyDown` handler or pointer event callbacks.
 5. For HTML overlay elements (dropdowns, buttons), place them absolutely inside `.device-viewport` and call `bumpUi()` on change.
 6. Call `bumpUi()` whenever DOM elements need to reflect updated state.
-7. Run `npx tsc --noEmit` to check types before finishing.
+7. **Clipboard mode:** all interaction branches in `onKeyDown` and pointer handlers check `s.clipboardMode` early and route to clipboard-specific handlers.
+8. **Clipboard audio modifications:** always dual-write (`AudioBuffer` + `Float32Array`) and call `recomputeClipboardTrackAmplitudes`.
+9. Run `npx tsc --noEmit` to check types before finishing.
