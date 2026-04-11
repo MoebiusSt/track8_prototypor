@@ -282,7 +282,7 @@ function buildClipboardBuffers(clip: ClipboardData, ctx: AudioContext): AudioBuf
     const buf = ctx.createBuffer(numChannels, Math.max(1, length), clip.sampleRate);
     if (channels) {
       for (let ch = 0; ch < channels.length; ch++) {
-        buf.copyToChannel(channels[ch]! as Float32Array<ArrayBuffer>, ch);
+        buf.copyToChannel(channels[ch]! as Float32Array, ch);
       }
     }
     buffers.push(buf);
