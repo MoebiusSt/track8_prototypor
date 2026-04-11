@@ -1878,14 +1878,10 @@ export const MainOverviewPage: React.FC = () => {
           return;
         }
 
-        // 1-8 / SHIFT+1-8: track selection
+        // 1-8 / SHIFT+1-8: track selection (digit row only; numpad keys are reserved for other functions)
         const cbDigit =
           e.code >= 'Digit1' && e.code <= 'Digit8' ? parseInt(e.code.slice(5), 10) - 1 : -1;
-        const cbNumpad =
-          e.code >= 'Numpad1' && e.code <= 'Numpad4'
-            ? parseInt(e.code.slice(6), 10) - 1
-            : -1;
-        const cbTrack = cbDigit >= 0 ? cbDigit : cbNumpad;
+        const cbTrack = cbDigit;
         if (cbTrack >= 0 && cbTrack < TRACK_COUNT) {
           e.preventDefault();
           if (e.shiftKey) {
@@ -1995,15 +1991,10 @@ export const MainOverviewPage: React.FC = () => {
         return;
       }
 
+      // Numpad keys are reserved for loop-selection, marker, cut/copy/paste — digit row only for tracks
       const digit =
         e.code >= 'Digit1' && e.code <= 'Digit8' ? parseInt(e.code.slice(5), 10) - 1 : -1;
-      // Numpad5/6 are reserved for loop-selection; Numpad7/8/9 for marker/cut/copy
-      const numpadCode = e.code;
-      const numpad =
-        numpadCode >= 'Numpad1' && numpadCode <= 'Numpad4'
-          ? parseInt(numpadCode.slice(6), 10) - 1
-          : -1;
-      const trackIndex = digit >= 0 ? digit : numpad;
+      const trackIndex = digit;
 
       if (trackIndex >= 0 && trackIndex < TRACK_COUNT) {
         if (e.shiftKey) {
