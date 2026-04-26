@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="track8-keys" xmlns="http://www.w3.org/2000/svg" width="138" height="138" viewBox="0 0 138 138">
+  <g id="paste-at-position-light">
+    <g id="rect24368">
+      <path d="M133,5v128H5V5h128M138,0H0v138h138V0h0Z" fill="#323232"/>
+    </g>
+    <g id="arrow-drop">
+      <path id="path24370" d="M53,87.09h32" fill="none" stroke="#323232" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+      <path id="path24372" d="M69,44.09v34.95c0,.21-.29.26-.36.06l-6.3-17.11c-.16-.44.16-.91.63-.91h12.18c.41,0,.7.41.56.8l-6.71,18.2" fill="#323232" stroke="#323232" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+    </g>
+  </g>
+</svg>

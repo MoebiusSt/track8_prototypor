@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="track8-keys" xmlns="http://www.w3.org/2000/svg" width="138" height="138" viewBox="0 0 138 138">
+  <g id="midi-overview-dark">
+    <rect width="138" height="138" fill="#323232"/>
+    <g id="keyboard">
+      <g id="path24469">
+        <path d="M102,48.98v41.11c0,.5-.41.91-.91.91H35.95c-.53,0-.95-.43-.95-.95v-41.04c0-.56.45-1.01,1.01-1.01h65.01c.54,0,.98.44.98.98Z" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+      </g>
+      <g id="path24471">
+        <path d="M46,49v24h7v-24" fill="#fff" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.74"/>
+      </g>
+      <g id="path25235">
+        <path d="M65,49v24h7v-24" fill="#fff" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.74"/>
+      </g>
+      <g id="path25237">
+        <path d="M84,49v24h7v-24" fill="#fff" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.74"/>
+      </g>
+      <g id="path25293">
+        <path d="M50,90v-16" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8"/>
+      </g>
+      <g id="path25943">
+        <path d="M68,90v-16" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8"/>
+      </g>
+      <g id="path25945">
+        <path d="M87,90v-16" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8"/>
+      </g>
+    </g>
+  </g>
+</svg>

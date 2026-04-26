@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="track8-keys" xmlns="http://www.w3.org/2000/svg" width="138" height="138" viewBox="0 0 138 138">
+  <g id="set-punch-in-grey">
+    <g id="g24354">
+      <g id="rect24346">
+        <path d="M133,5v128H5V5h128M138,0H0v138h138V0h0Z" fill="#999"/>
+      </g>
+      <g id="g24352">
+        <path id="path24348" d="M70,47h-20c-2.76,0-5,2.24-5,5v34c0,2.76,2.24,5,5,5h20" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+        <path id="path24350" d="M53,69h38.37c.31,0,.38-.43.09-.53l-19.55-7.14c-.44-.16-.9.16-.9.63v14.09c0,.46.46.79.9.63l21.1-7.67" fill="#999" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="track8-keys" xmlns="http://www.w3.org/2000/svg" width="138" height="138" viewBox="0 0 138 138">
+  <g id="jump-right-grey">
+    <g id="rect24240">
+      <path d="M133,5v128H5V5h128M138,0H0v138h138V0h0Z" fill="#999"/>
+    </g>
+    <path id="arrow-right" d="M22,69h83.03c.38,0,.47-.52.11-.65l-26.14-9.35v20.01s28-10.01,28-10.01" fill="#999" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+  </g>
+</svg>

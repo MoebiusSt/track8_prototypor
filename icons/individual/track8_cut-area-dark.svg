@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="track8-keys" xmlns="http://www.w3.org/2000/svg" width="138" height="138" viewBox="0 0 138 138">
+  <g id="cut-area-dark">
+    <rect id="rect24258" width="138" height="138" fill="#323232"/>
+    <g id="scissor">
+      <path id="path24260" d="M81.5,90l-24-44s-9.64,3.79-5,12c5.05,8.92,12,2,12,2" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+      <path id="path24262" d="M56.5,90l24-44s9.64,3.79,5,12c-5.04,8.92-12,2-12,2" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+    </g>
+  </g>
+</svg>

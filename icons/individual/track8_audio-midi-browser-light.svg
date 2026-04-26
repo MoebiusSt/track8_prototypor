@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="track8-keys" xmlns="http://www.w3.org/2000/svg" width="138" height="138" viewBox="0 0 138 138">
+  <g id="audio-midi-browser-light">
+    <g id="rect24286">
+      <path d="M133,5v128H5V5h128M138,0H0v138h138V0h0Z" fill="#323232"/>
+    </g>
+    <g id="document">
+      <path id="path24288" d="M51.96,48h27.94c.07,0,.13.03.18.08l7.93,7.93h-7.04c-.53,0-.96-.43-.96-.96v-7.04l8,8v33c0,.55-.45,1-1,1h-35.06c-.52,0-.94-.42-.94-.94v-40.11c0-.53.43-.96.96-.96Z" fill="none" stroke="#323232" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+      <path id="path24290" d="M60,63h19" fill="none" stroke="#323232" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+      <path id="path24292" d="M60,71h19" fill="none" stroke="#323232" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+      <path id="path24294" d="M60,79h19" fill="none" stroke="#323232" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+    </g>
+  </g>
+</svg>
