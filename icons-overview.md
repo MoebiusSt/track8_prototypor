@@ -7,7 +7,7 @@ Rendered via standalone SVG files (GitHub/Markdown-safe): `icons/individual/*.sv
 
 ## Responsive Icons (Light/Dark Mode Support)
 
-<picture style="display: inline-block; vertical-align: middle; line-height: 0">
+<picture>
   <source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_audio-overview-dark.svg" />
   <img alt="audio-overview" src="icons/individual/track8_audio-overview-light.svg" width="25" height="25" style="display: block" />
 </picture> Audio Overview
