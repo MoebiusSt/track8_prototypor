@@ -7,7 +7,7 @@
       </g>
     </symbol>
   </defs>
-  <g id="track-keys-light">
+  <g id="track-keys-grey">
     <g id="track-key-1-grey">
       <path d="M68.33,104.1v-56.6h-11.75v-4.75c2.53,0,4.7-.24,6.5-.73,1.8-.48,3.29-1.35,4.47-2.6s2.11-3.03,2.78-5.33h5v70h-7Z" fill="#999"/>
       <use width="137.5" height="137.5" transform="" xlink:href="#cushion-grey"/>

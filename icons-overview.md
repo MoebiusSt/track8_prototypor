@@ -30,3 +30,16 @@ Rendered via standalone SVG files (GitHub/Markdown-safe): `icons/individual/*.sv
   <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_track-key-7-dark.svg"><img alt="track-key-7" src="icons/individual/track8_track-key-7-light.svg" width="25"></picture> <code>track-key-7</code></li>
   <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_track-key-8-dark.svg"><img alt="track-key-8" src="icons/individual/track8_track-key-8-light.svg" width="25"></picture> <code>track-key-8</code></li>
 </ul>
+
+## Encoders (1–8) (Light/Dark Mode Support)
+
+<ul>
+  <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-1-dark.svg"><img alt="encoder-1" src="icons/individual/track8_encoder-1-light.svg" width="25"></picture> <code>encoder-1</code></li>
+  <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-2-dark.svg"><img alt="encoder-2" src="icons/individual/track8_encoder-2-light.svg" width="25"></picture> <code>encoder-2</code></li>
+  <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-3-dark.svg"><img alt="encoder-3" src="icons/individual/track8_encoder-3-light.svg" width="25"></picture> <code>encoder-3</code></li>
+  <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-4-dark.svg"><img alt="encoder-4" src="icons/individual/track8_encoder-4-light.svg" width="25"></picture> <code>encoder-4</code></li>
+  <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-5-dark.svg"><img alt="encoder-5" src="icons/individual/track8_encoder-5-light.svg" width="25"></picture> <code>encoder-5</code></li>
+  <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-6-dark.svg"><img alt="encoder-6" src="icons/individual/track8_encoder-6-light.svg" width="25"></picture> <code>encoder-6</code></li>
+  <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-7-dark.svg"><img alt="encoder-7" src="icons/individual/track8_encoder-7-light.svg" width="25"></picture> <code>encoder-7</code></li>
+  <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-8-dark.svg"><img alt="encoder-8" src="icons/individual/track8_encoder-8-light.svg" width="25"></picture> <code>encoder-8</code></li>
+</ul>
