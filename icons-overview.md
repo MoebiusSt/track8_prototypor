@@ -31,7 +31,7 @@ Rendered via standalone SVG files (GitHub/Markdown-safe): `icons/individual/*.sv
 
 ## Light Icons
 
-- <img src="icons/individual/audio-overview-light.svg" width="20" height="20" alt="audio-overview-light"> `audio-overview-light`
+- <img src="icons/individual/audio-overview-light.svg" width="20" height="20" alt="audio-overview-light" style="filter:invert(1)"> `audio-overview-light`
 - <img src="icons/individual/midi-overview-light.svg" width="20" height="20" alt="midi-overview-light"> `midi-overview-light`
 - <img src="icons/individual/master-fx-light.svg" width="20" height="20" alt="master-fx-light"> `master-fx-light`
 - <img src="icons/individual/audio-midi-browser-light.svg" width="20" height="20" alt="audio-midi-browser-light"> `audio-midi-browser-light`
