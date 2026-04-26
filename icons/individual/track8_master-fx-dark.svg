@@ -10,7 +10,7 @@
   <g id="keypad-dark">
     <g id="master-fx-dark">
       <use width="137.5" height="137.5" transform="" xlink:href="#cushin-dark"/>
-      <path id="flash" d="M87.05,41.27l-31.46,20.57,14.52,13.31-18.15,20.57,31.46-20.57-14.52-13.31,18.15-20.57Z" fill="#fff" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+      <path id="flash" d="M88.8,38.55l-34.61,22.63,15.97,14.64-19.97,22.63,34.61-22.63-15.97-14.64,19.97-22.63Z" fill="#fff" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
     </g>
   </g>
 </svg>

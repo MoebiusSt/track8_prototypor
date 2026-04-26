@@ -11,12 +11,12 @@
     <g id="set-marker-grey">
       <g id="markers">
         <g id="left-marker">
-          <path id="path24390" d="M29.81,69h18.18" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
-          <circle cx="56" cy="69" r="8" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+          <path id="path24390" d="M25.75,69h19.99" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+          <circle cx="54.56" cy="69" r="8.8" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
         </g>
         <g id="right_marker" data-name="right marker">
-          <path id="path24396" d="M110.99,69h-19" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
-          <circle cx="82" cy="69" r="8" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+          <path id="path24396" d="M115.05,69h-20.9" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+          <circle cx="83.16" cy="69" r="8.8" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
         </g>
       </g>
       <use width="137.5" height="137.5" transform="translate(0 0) scale(1.01)" xlink:href="#cushion-grey"/>
