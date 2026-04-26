@@ -16,6 +16,9 @@ Combo Icon - PLUS sign – always use **half width** of regular icons:
 
 <ul>
   <li>
+    <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_plus-dark.svg"><img alt="plus" src="icons/individual/track8_plus-light.svg" width="11"></picture>
+    Combo plus icon <code>plus</code></li>
+  <li>
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_audio-overview-dark.svg"><img alt="audio-overview" src="icons/individual/track8_audio-overview-light.svg" width="22"></picture> 
     Audio Overview: <code>audio-overview</code></li>
   <li>
@@ -116,7 +119,4 @@ Combo Icon - PLUS sign – always use **half width** of regular icons:
   <li>
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-8-dark.svg"><img alt="encoder-8" src="icons/individual/track8_encoder-8-light.svg" width="22"></picture> 
     Encoder 8: <code>encoder-8</code></li>
-  <li>
-    <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_plus-dark.svg"><img alt="plus" src="icons/individual/track8_plus-light.svg" width="11"></picture>
-    Combo plus icon <code>plus/code></li>
 </ul>
