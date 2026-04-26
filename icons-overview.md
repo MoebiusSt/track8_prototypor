@@ -5,7 +5,7 @@ Rendered via standalone SVG files (GitHub/Markdown-safe): `icons/individual/*.sv
 ## Responsive Icons (Light/Dark Mode Support)
 
 <ul>
-  <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_audio-overview-dark.svg"><img alt="audio-overview" src="icons/individual/track8_audio-overview-light.svg" width="25"></picture> <code>audio-overview</code></li>
+  <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_audio-overview-dark.svg"><img alt="audio-overview" src="icons/individual/track8_audio-overview-light.svg" width="25" style="vertical-align: middle"></picture> <code>audio-overview</code></li>
   <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_midi-overview-dark.svg"><img alt="midi-overview" src="icons/individual/track8_midi-overview-light.svg" width="25"></picture> <code>midi-overview</code></li>
   <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_master-fx-dark.svg"><img alt="master-fx" src="icons/individual/track8_master-fx-light.svg" width="25"></picture> <code>master-fx</code></li>
   <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_audio-midi-browser-dark.svg"><img alt="audio-midi-browser" src="icons/individual/track8_audio-midi-browser-light.svg" width="25"></picture> <code>audio-midi-browser</code></li>
