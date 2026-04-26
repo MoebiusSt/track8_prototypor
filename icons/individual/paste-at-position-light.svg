@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="1066 152 138 138"><g id="paste-at-position-light">
+    <g id="rect24368-2" data-name="rect24368">
+      <path d="M1199,157v128h-128v-128h128M1204,152h-138v138h138v-138h0Z" fill="#323232" />
+    </g>
+    <g id="arrow-drop-2" data-name="arrow-drop">
+      <path id="path24370-2" data-name="path24370" d="M1119,239.09h32" fill="none" stroke="#323232" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72" />
+      <path id="path24372-2" data-name="path24372" d="M1135,196.09v34.95c0,.21-.29.26-.36.06l-6.3-17.11c-.16-.44.16-.91.63-.91h12.18c.41,0,.7.41.56.8l-6.71,18.2" fill="#323232" stroke="#323232" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72" />
+    </g>
+  </g>
+
+  </svg>

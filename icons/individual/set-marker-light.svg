@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="610 152 138 138"><g id="set-marker-light">
+    <g id="rect24388-2" data-name="rect24388">
+      <path d="M743,157v128h-128v-128h128M748,152h-138v138h138v-138h0Z" fill="#323232" />
+    </g>
+    <g id="markers-2" data-name="markers">
+      <g id="left-marker-2" data-name="left-marker">
+        <path id="path24390-2" data-name="path24390" d="M639.81,221h18.18" fill="none" stroke="#323232" stroke-linecap="round" stroke-miterlimit="3.78" stroke-width="4.72" />
+        <circle cx="666" cy="221" r="8" fill="none" stroke="#323232" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72" />
+      </g>
+      <g id="right_marker-2" data-name="right marker">
+        <path id="path24396-2" data-name="path24396" d="M720.99,221h-19" fill="none" stroke="#323232" stroke-linecap="round" stroke-miterlimit="3.78" stroke-width="4.72" />
+        <circle cx="692" cy="221" r="8" fill="none" stroke="#323232" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72" />
+      </g>
+    </g>
+  </g>
+
+  </svg>
