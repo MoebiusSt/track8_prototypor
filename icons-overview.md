@@ -7,6 +7,11 @@ Rendered via standalone SVG files (GitHub/Markdown-safe): `icons/individual/*.sv
 
 ## Responsive Icons (Light/Dark Mode Support)
 
+<picture style="display: inline-block; vertical-align: middle; line-height: 0">
+  <source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_audio-overview-dark.svg" />
+  <img alt="audio-overview" src="icons/individual/track8_audio-overview-light.svg" width="25" height="25" style="display: block" />
+</picture> Audio Overview
+
 <ul>
   <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_audio-overview-dark.svg"><img alt="audio-overview" src="icons/individual/track8_audio-overview-light.svg" width="25"></picture> <code>audio-overview</code></li>
   <li><picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_midi-overview-dark.svg"><img alt="midi-overview" src="icons/individual/track8_midi-overview-light.svg" width="25"></picture> <code>midi-overview</code></li>
