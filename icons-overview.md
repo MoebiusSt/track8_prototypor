@@ -16,9 +16,6 @@ Combo Icon - PLUS sign – always use **half width** of regular icons:
 
 <ul>
   <li>
-    <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_plus-dark.svg"><img alt="shift" src="icons/individual/track8_plus-light.svg" width="15"></picture>
-    Combo **+** icon <code>plus/code></li>
-  <li>
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_audio-overview-dark.svg"><img alt="audio-overview" src="icons/individual/track8_audio-overview-light.svg" width="22"></picture> 
     Audio Overview: <code>audio-overview</code></li>
   <li>
