@@ -10,7 +10,7 @@
   <g id="keypad-grey">
     <g id="set-punch-out-grey">
       <g id="icon-punch-out">
-        <path id="path24338" d="M60.69,42.38h25.41c3.34,0,6.05,2.71,6.05,6.05v41.14c0,3.33-2.72,6.05-6.05,6.05h-25.41" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+        <path id="path24338" d="M60.68,42.38h25.41c3.34,0,6.05,2.71,6.05,6.05v41.14c0,3.33-2.72,6.05-6.05,6.05h-25.41" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
         <path id="path24340" d="M32.85,69h47.81c.35,0,.43-.48.1-.6l-23.76-8.66c-.57-.21-1.16.21-1.16.81v16.93c0,.58.58.98,1.12.78l25.5-9.27" fill="#999" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
       </g>
       <use width="137.5" height="137.5" transform="translate(0 0) scale(1.01)" xlink:href="#cushion-grey"/>
