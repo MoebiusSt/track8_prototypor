@@ -2,6 +2,9 @@
 
 Rendered via standalone SVG files (GitHub/Markdown-safe): `icons/individual/*.svg`
 
+![Icon für Light-Mode](icons/individual/track8_audio-overview-light.svg#gh-light-mode-only)
+![Icon für Dark-Mode](icons/individual/track8_audio-overview-dark.svg#gh-dark-mode-only)
+
 ## Responsive Icons (Light/Dark Mode Support)
 
 <ul>
