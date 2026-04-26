@@ -6,135 +6,104 @@ Rendered via standalone SVG files (GitHub/Markdown-safe): `icons/individual/*.sv
 
 <ul>
   <li>
-    Audio Overview:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_audio-overview-dark.svg"><img alt="audio-overview" src="icons/individual/track8_audio-overview-light.svg" width="22"></picture> 
-    <code>audio-overview</code></li>
+    Audio Overview: <code>audio-overview</code></li>
   <li>
-    Midi Overview:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_midi-overview-dark.svg"><img alt="midi-overview" src="icons/individual/track8_midi-overview-light.svg" width="22"></picture> 
-    <code>midi-overview</code></li>
+    Midi Overview: <code>midi-overview</code></li>
   <li>
-    Master FX:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_master-fx-dark.svg"><img alt="master-fx" src="icons/individual/track8_master-fx-light.svg" width="22"></picture> 
-    <code>master-fx</code></li>
+    Master FX: <code>master-fx</code></li>
   <li>
-    Audio / MIDI Browser:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_audio-midi-browser-dark.svg"><img alt="audio-midi-browser" src="icons/individual/track8_audio-midi-browser-light.svg" width="22"></picture> 
-    <code>audio-midi-browser</code></li>
+     Audio / MIDI Browser: <code>audio-midi-browser</code></li>
   <li>
-    Set Marker:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_set-marker-dark.svg"><img alt="set-marker" src="icons/individual/track8_set-marker-light.svg" width="22"></picture> 
-    <code>set-marker</code></li>
+    Set Marker:<code>set-marker</code></li>
   <li>
-    Cut Area:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_cut-area-dark.svg"><img alt="cut-area" src="icons/individual/track8_cut-area-light.svg" width="22"></picture> 
-    <code>cut-area</code></li>
+     Cut Area: <code>cut-area</code></li>
   <li>
-    Copy Area:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_copy-area-dark.svg"><img alt="copy-area" src="icons/individual/track8_copy-area-light.svg" width="22"></picture> 
-    <code>copy-area</code></li>
+    Copy Area: <code>copy-area</code></li>
   <li>
-    Paste at Position:
-    <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_paste-at-position-dark.svg"><img alt="paste-at-position" src="icons/individual/track8_paste-at-position-light.svg" width="22"></picture> <code>paste-at-position</code></li>
+    <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_paste-at-position-dark.svg"><img alt="paste-at-position" src="icons/individual/track8_paste-at-position-light.svg" width="22"></picture> 
+     Paste at Position: <code>paste-at-position</code></li>
   <li>
-    Toggle Loop:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_toggle-loop-dark.svg"><img alt="toggle-loop" src="icons/individual/track8_toggle-loop-light.svg" width="22"></picture> 
-    <code>toggle-loop</code></li>
+    Toggle Loop: <code>toggle-loop</code></li>
   <li>
-    Set Punch In:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_set-punch-in-dark.svg"><img alt="set-punch-in" src="icons/individual/track8_set-punch-in-light.svg" width="22"></picture> 
-    <code>set-punch-in</code></li>
+    Set Punch In: <code>set-punch-in</code></li>
   <li>
-    Set Punch Out:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_set-punch-out-dark.svg"><img alt="set-punch-out" src="icons/individual/track8_set-punch-out-light.svg" width="22"></picture> 
-    <code>set-punch-out</code></li>
+    Set Punch Out: <code>set-punch-out</code></li>
   <li>
-    Arm Record:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_arm-record-dark.svg"><img alt="arm-record" src="icons/individual/track8_arm-record-light.svg" width="22"></picture> 
-    <code>arm-record</code></li>
+    Arm Record: <code>arm-record</code></li>
   <li>
-    Shift:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_shift-dark.svg"><img alt="shift" src="icons/individual/track8_shift-light.svg" width="22"></picture> 
-    <code>shift</code></li>
+    Shift: <code>shift</code></li>
   <li>
-    Play / Pause:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_play-pause-dark.svg"><img alt="play-pause" src="icons/individual/track8_play-pause-light.svg" width="22"></picture> 
-    <code>play-pause</code></li>
+    Play / Pause: <code>play-pause</code></li>
   <li>
-    Jump Left:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_jump-left-dark.svg"><img alt="jump-left" src="icons/individual/track8_jump-left-light.svg" width="22"></picture> 
-    <code>jump-left</code></li>
+    Jump Left: <code>jump-left</code></li>
   <li>
-    Jump Right:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_jump-right-dark.svg"><img alt="jump-right" src="icons/individual/track8_jump-right-light.svg" width="22"></picture> 
-    <code>jump-right</code></li>
+    Jump Right:<code>jump-right</code></li>
   <li>
-    Track Key 1:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_track-key-1-dark.svg"><img alt="track-key-1" src="icons/individual/track8_track-key-1-light.svg" width="22"></picture> 
-    <code>track-key-1</code></li>
+    Track Key 1: <code>track-key-1</code></li>
   <li>
-    Track Key 2:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_track-key-2-dark.svg"><img alt="track-key-2" src="icons/individual/track8_track-key-2-light.svg" width="22"></picture> 
-    <code>track-key-2</code></li>
+   Track Key 2: <code>track-key-2</code></li>
   <li>
-    Track Key 3:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_track-key-3-dark.svg"><img alt="track-key-3" src="icons/individual/track8_track-key-3-light.svg" width="22"></picture> 
-    <code>track-key-3</code></li>
+    Track Key 3: <code>track-key-3</code></li>
   <li>
-    Track Key 4:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_track-key-4-dark.svg"><img alt="track-key-4" src="icons/individual/track8_track-key-4-light.svg" width="22"></picture> 
-    <code>track-key-4</code></li>
+    Track Key 4: <code>track-key-4</code></li>
   <li>
-    Track Key 5:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_track-key-5-dark.svg"><img alt="track-key-5" src="icons/individual/track8_track-key-5-light.svg" width="22"></picture> 
-    <code>track-key-5</code></li>
+    Track Key 5: <code>track-key-5</code></li>
   <li>
-    Track Key 6:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_track-key-6-dark.svg"><img alt="track-key-6" src="icons/individual/track8_track-key-6-light.svg" width="22"></picture> 
-    <code>track-key-6</code></li>
+    Track Key 6: <code>track-key-6</code></li>
   <li>
-    Track Key 7:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_track-key-7-dark.svg"><img alt="track-key-7" src="icons/individual/track8_track-key-7-light.svg" width="22"></picture> 
-    <code>track-key-7</code></li>
+    Track Key 7: <code>track-key-7</code></li>
   <li>
-    Track Key 8:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_track-key-8-dark.svg"><img alt="track-key-8" src="icons/individual/track8_track-key-8-light.svg" width="22"></picture> 
-    <code>track-key-8</code></li>
+    Track Key 8: <code>track-key-8</code></li>
 </ul>
 
 ## Encoders (1–8) (Light/Dark Mode Support)
 
 <ul>
   <li>
-    Encoder 1:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-1-dark.svg"><img alt="encoder-1" src="icons/individual/track8_encoder-1-light.svg" width="22"></picture> 
-    <code>encoder-1</code></li>
+    Encoder 1: <code>encoder-1</code></li>
   <li>
-    Encoder 2:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-2-dark.svg"><img alt="encoder-2" src="icons/individual/track8_encoder-2-light.svg" width="22"></picture> 
-    <code>encoder-2</code></li>
+    Encoder 2: <code>encoder-2</code></li>
   <li>
-    Encoder 3:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-3-dark.svg"><img alt="encoder-3" src="icons/individual/track8_encoder-3-light.svg" width="22"></picture> 
-    <code>encoder-3</code></li>
+    Encoder 3: <code>encoder-3</code></li>
   <li>
-    Encoder 4:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-4-dark.svg"><img alt="encoder-4" src="icons/individual/track8_encoder-4-light.svg" width="22"></picture> 
-    <code>encoder-4</code></li>
+    Encoder 4: <code>encoder-4</code></li>
   <li>
-    Encoder 5:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-5-dark.svg"><img alt="encoder-5" src="icons/individual/track8_encoder-5-light.svg" width="22"></picture> 
-    <code>encoder-5</code></li>
+    Encoder 5: <code>encoder-5</code></li>
   <li>
-    Encoder 6:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-6-dark.svg"><img alt="encoder-6" src="icons/individual/track8_encoder-6-light.svg" width="22"></picture> 
-    <code>encoder-6</code></li>
+    Encoder 6: <code>encoder-6</code></li>
   <li>
-    Encoder 7:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-7-dark.svg"><img alt="encoder-7" src="icons/individual/track8_encoder-7-light.svg" width="22"></picture> 
-    <code>encoder-7</code></li>
+    Encoder 7: <code>encoder-7</code></li>
   <li>
-    Encoder 8:
     <picture><source media="(prefers-color-scheme: dark)" srcset="icons/individual/track8_encoder-8-dark.svg"><img alt="encoder-8" src="icons/individual/track8_encoder-8-light.svg" width="22"></picture> 
-    <code>encoder-8</code></li>
+    Encoder 8: <code>encoder-8</code></li>
 </ul>
