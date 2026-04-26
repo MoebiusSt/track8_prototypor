@@ -1,14 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg id="track8-keys" xmlns="http://www.w3.org/2000/svg" width="138" height="138" viewBox="0 0 138 138">
-  <g id="set-punch-in-grey">
-    <g id="g24354">
-      <g id="rect24346">
-        <path d="M133,5v128H5V5h128M138,0H0v138h138V0h0Z" fill="#999"/>
+<svg id="track8-keys" xmlns="http://www.w3.org/2000/svg" width="138" height="138" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 138 138">
+  <defs>
+    <symbol id="cushion-grey" viewBox="0 0 137.5 137.5">
+      <g id="cushion-grey-2" data-name="cushion-grey">
+        <path d="M68.75,4.7c16.69,0,33.62.8,50.3,2.36,5.52.54,10.85,5.87,11.39,11.37,3.14,33.39,3.14,67.25,0,100.62-.54,5.52-5.87,10.85-11.37,11.39-16.7,1.57-33.63,2.36-50.32,2.36s-33.62-.8-50.3-2.36c-5.52-.54-10.85-5.87-11.39-11.37-3.14-33.39-3.14-67.25,0-100.62.54-5.52,5.87-10.85,11.37-11.39,16.7-1.57,33.63-2.36,50.32-2.36M68.75,0c-16.92,0-33.84.79-50.76,2.38-7.75.76-14.84,7.86-15.61,15.61C-.79,51.83-.79,85.67,2.38,119.51c.76,7.75,7.86,14.84,15.61,15.61,16.92,1.59,33.84,2.38,50.76,2.38s33.84-.79,50.76-2.38c7.75-.76,14.84-7.86,15.61-15.61,3.18-33.84,3.18-67.68,0-101.52-.76-7.75-7.86-14.84-15.61-15.61C102.59.79,85.67,0,68.75,0h0Z" fill="#999"/>
       </g>
-      <g id="g24352">
-        <path id="path24348" d="M70,47h-20c-2.76,0-5,2.24-5,5v34c0,2.76,2.24,5,5,5h20" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
-        <path id="path24350" d="M53,69h38.37c.31,0,.38-.43.09-.53l-19.55-7.14c-.44-.16-.9.16-.9.63v14.09c0,.46.46.79.9.63l21.1-7.67" fill="#999" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+    </symbol>
+  </defs>
+  <g id="keypad-grey">
+    <g id="set-punch-in-grey">
+      <g id="icon-punch-in">
+        <path id="path24348" d="M70.21,42.38h-24.2c-3.34,0-6.05,2.71-6.05,6.05v41.14c0,3.34,2.71,6.05,6.05,6.05h24.2" fill="none" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+        <path id="path24350" d="M49.64,69h46.43c.37,0,.46-.52.11-.64l-23.66-8.64c-.53-.19-1.09.2-1.09.76v17.04c0,.56.56.95,1.09.76l25.53-9.28" fill="#999" stroke="#999" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
       </g>
+      <use width="137.5" height="137.5" transform="translate(0 0) scale(1.01)" xlink:href="#cushion-grey"/>
     </g>
   </g>
 </svg>

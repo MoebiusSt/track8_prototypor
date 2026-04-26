@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg id="track8-keys" xmlns="http://www.w3.org/2000/svg" width="138" height="138" viewBox="0 0 138 138">
-  <g id="paste-at-position-dark">
-    <rect id="rect24368" width="138" height="138" fill="#323232"/>
-    <g id="arrow-drop">
-      <path id="path24370" d="M53,87.09h32" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
-      <path id="path24372" d="M69,44.09v34.95c0,.21-.29.26-.36.06l-6.3-17.11c-.16-.44.16-.91.63-.91h12.18c.41,0,.7.41.56.8l-6.71,18.2" fill="#fff" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+<svg id="track8-keys" xmlns="http://www.w3.org/2000/svg" width="138" height="138" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 138 138">
+  <defs>
+    <symbol id="cushin-dark" viewBox="0 0 137.5 137.5">
+      <g id="rect-background-dark">
+        <path d="M17.99,2.38C51.83-.79,85.67-.79,119.51,2.38c7.75.76,14.84,7.86,15.61,15.61,3.18,33.84,3.18,67.68,0,101.52-.76,7.75-7.86,14.84-15.61,15.61-33.84,3.18-67.68,3.18-101.52,0-7.75-.76-14.84-7.86-15.61-15.61C-.79,85.67-.79,51.83,2.38,17.99c.76-7.75,7.86-14.84,15.61-15.61Z" fill="#323232" fill-rule="evenodd"/>
+      </g>
+    </symbol>
+  </defs>
+  <g id="keypad-dark">
+    <g id="paste-at-position-dark">
+      <use width="137.5" height="137.5" transform="" xlink:href="#cushin-dark"/>
+      <g id="arrow-drop">
+        <path id="path24370" d="M47.7,94.21h42.59" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+        <path id="path24372" d="M69,36.98v46.51c0,.28-.39.35-.48.09l-8.39-22.77c-.22-.59.22-1.21.84-1.21h16.21c.55,0,.93.55.74,1.06l-8.93,24.23" fill="#fff" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.72"/>
+      </g>
     </g>
   </g>
 </svg>
